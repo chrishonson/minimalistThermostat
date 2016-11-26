@@ -793,6 +793,10 @@ int publishTemperature( float temperature, float humidity ) {
     snprintf(buf, sizeof(buf), "{ \"temperature\":\"" + currentTempString + 
                                "\",\"humidity\":\"" + currentHumidityString + "\"}");
     Particle.publish("temp", buf, 60, PRIVATE);
+
+  String tempStatus = "New current temp: " + currentTempString + getTime();
+  Particle.publish("googleDocs", "{\"my-name\":\"" + tempStatus + "\"}", 60, PRIVATE);
+
   return 0;
 }
 
