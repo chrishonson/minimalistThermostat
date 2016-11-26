@@ -1,3 +1,15 @@
+// This #include statement was automatically added by the Particle IDE.
+#include "blynk/blynk.h"
+
+// This #include statement was automatically added by the Particle IDE.
+#include "FiniteStateMachine/FiniteStateMachine.h"
+
+// This #include statement was automatically added by the Particle IDE.
+#include "PietteTech_DHT/PietteTech_DHT.h"
+
+// This #include statement was automatically added by the Particle IDE.
+#include "elapsedMillis/elapsedMillis.h"
+
 //The MIT License (MIT)
 //Copyright (c) 2016 Gustavo Gonnet
 //
@@ -21,11 +33,7 @@
 // hackster: https://www.hackster.io/gusgonnet/the-minimalist-thermostat-bb0410
 
 #include "application.h"
-#include "elapsedMillis.h"
-#include "PietteTech_DHT.h"
-#include "FiniteStateMachine.h"
-#include "blynk.h"
-#include "blynkAuthToken.h"
+// #include "blynkAuthToken.h"
 
 #define APP_NAME "Thermostat"
 String VERSION = "Version 0.24";
@@ -162,11 +170,15 @@ elapsedMillis pulseTimer;
 int fan = D1;
 int heat = D2;
 int cool = D3;
+int photoresistor = A0;
+int power = A5;
+int led1 = D0;
+int led2 = D7;
+
 //TESTING_HACK
 int fanOutput;
 int heatOutput;
 int coolOutput;
-
 /*******************************************************************************
  DHT sensor
 *******************************************************************************/
@@ -192,7 +204,7 @@ float averageTemperature;
 *******************************************************************************/
 //temperature related variables - internal
 float targetTemp = 19.0;
-float currentTemp = 20.0;
+float currentTemp = 10.0;
 float currentHumidity = 0.0;
 
 //you can change this to your liking
@@ -258,7 +270,8 @@ bool testing = false;
   #define BLYNK_AUTH_TOKEN "1234567890123456789012345678901234567890"
  replace with your project auth token (the blynk app will give you one)
 *******************************************************************************/
-#define USE_BLYNK "yes"
+#define USE_BLYNK "no"
+#define BLYNK_AUTH_TOKEN "notused"
 char auth[] = BLYNK_AUTH_TOKEN;
 
 //definitions for the blynk interface
@@ -315,6 +328,7 @@ EepromMemoryStructure eepromMemory;
 bool settingsHaveChanged = false;
 elapsedMillis settingsHaveChanged_timer;
 #define SAVE_SETTINGS_INTERVAL 10000
+int analogvalue; // Here we are declaring the integer variable analogvalue, which we will use later to store the value of the photoresistor.
 
 /*******************************************************************************
  * Function Name  : setup
@@ -325,6 +339,23 @@ void setup() {
   //publish startup message with firmware version
   Particle.publish(APP_NAME, VERSION, 60, PRIVATE);
 
+  pinMode(led1, OUTPUT);
+  pinMode(led2, OUTPUT);
+
+  // We are also going to declare a Particle.function so that we can turn the LED on and off from the cloud.
+  Particle.function("led",ledToggle);
+  // This is saying that when we ask the cloud for the function "led", it will employ the function ledToggle() from this app.
+
+  // For good measure, let's also make sure both LEDs are off when we start:
+  digitalWrite(led1, LOW);
+  digitalWrite(led2, LOW);
+  
+  //photoresistor example stuff
+  pinMode(photoresistor,INPUT);  // Our photoresistor pin is input (reading the photoresistor)
+  pinMode(power,OUTPUT); // The pin powering the photoresistor is output (sending out consistent power)
+  digitalWrite(power,HIGH);
+  Particle.variable("analogvalue", &analogvalue, INT);
+  
   //declare and init pins
   pinMode(fan, OUTPUT);
   pinMode(heat, OUTPUT);
@@ -400,7 +431,8 @@ void dht_wrapper() { DHT.isrCallback(); }
  * Description    : this function runs continuously while the project is running
  *******************************************************************************/
 void loop() {
-
+analogvalue = analogRead(photoresistor);
+delay(100);
   //this function reads the temperature of the DHT sensor
   readTemperature();
 
@@ -426,7 +458,29 @@ void loop() {
   saveSettings();
 
 }
+int ledToggle(String command) {
+    /* Particle.functions always take a string as an argument and return an integer.
+    Since we can pass a string, it means that we can give the program commands on how the function should be used.
+    In this case, telling the function "on" will turn the LED on and telling it "off" will turn the LED off.
+    Then, the function returns a value to us to let us know what happened.
+    In this case, it will return 1 for the LEDs turning on, 0 for the LEDs turning off,
+    and -1 if we received a totally bogus command that didn't do anything to the LEDs.
+    */
 
+    if (command=="on") {
+        digitalWrite(led1,HIGH);
+        digitalWrite(led2,HIGH);
+        return 1;
+    }
+    else if (command=="off") {
+        digitalWrite(led1,LOW);
+        digitalWrite(led2,LOW);
+        return 0;
+    }
+    else {
+        return -1;
+    }
+}
 /*******************************************************************************
  * Function Name  : setTargetTemp
  * Description    : sets the target temperature of the thermostat
@@ -714,8 +768,9 @@ int readTemperature() {
  *******************************************************************************/
 int publishTemperature( float temperature, float humidity ) {
 
+
   char currentTempChar[32];
-  currentTemp = temperature;
+  currentTemp = (1.8 * temperature) + 32;//convert to f
   int currentTempDecimals = (currentTemp - (int)currentTemp) * 100;
   sprintf(currentTempChar,"%0d.%d", (int)currentTemp, currentTempDecimals);
 
@@ -729,8 +784,15 @@ int publishTemperature( float temperature, float humidity ) {
   currentHumidityString = String(currentHumidityChar);
 
   //publish readings
-  Particle.publish(APP_NAME, currentTempString + "°C " + currentHumidityString + "%", 60, PRIVATE);
-
+  Particle.publish(APP_NAME, currentTempString + "°F " + currentHumidityString + "%", 60, PRIVATE);
+  //post to thinkspeak
+//   Particle.publish("temp", currentTempString, PRIVATE);
+//   Particle.publish("humidity", currentHumidityString, PRIVATE);
+  
+  char buf[1000];
+    snprintf(buf, sizeof(buf), "{ \"temperature\":\"" + currentTempString + 
+                               "\",\"humidity\":\"" + currentHumidityString + "\"}");
+    Particle.publish("temp", buf, 60, PRIVATE);
   return 0;
 }
 
@@ -1486,3 +1548,5 @@ uint8_t convertModeToInt( String mode )
   return 0;
 
 }
+
+
