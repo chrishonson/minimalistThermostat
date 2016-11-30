@@ -1,4 +1,7 @@
 // This #include statement was automatically added by the Particle IDE.
+#include "MQTT/MQTT.h"
+
+// This #include statement was automatically added by the Particle IDE.
 #include "blynk/blynk.h"
 
 // This #include statement was automatically added by the Particle IDE.
@@ -330,6 +333,19 @@ elapsedMillis settingsHaveChanged_timer;
 #define SAVE_SETTINGS_INTERVAL 10000
 int analogvalue; // Here we are declaring the integer variable analogvalue, which we will use later to store the value of the photoresistor.
 
+
+void callback(char* topic, byte* payload, unsigned int length);
+
+/**
+ * if want to use IP address,
+ * byte server[] = { XXX,XXX,XXX,XXX };
+ * MQTT client(server, 1883, callback);
+ * want to use domain name,
+ * MQTT client("www.sample.com", 1883, callback);
+ **/
+// MQTT client;
+ MQTT client("m13.cloudmqtt.com", 16619, callback);
+
 /*******************************************************************************
  * Function Name  : setup
  * Description    : this function runs once at system boot
@@ -417,6 +433,19 @@ void setup() {
     temperatureSamples[i] = DUMMY;
   }
 
+    // connect to the server
+    int retries = 0;
+    while(!client.isConnected() && retries < 20){
+        client.connect("m13.cloudmqtt.com", "home", "chicago");
+        retries++;
+        delay(500);
+    }
+  // publish/subscribe
+  if (client.isConnected()) {
+      // client.publish("outTopic/message","hello world");
+      client.subscribe("owntracks/#");
+  }
+
   //restore settings from eeprom, if there were any saved before
   readFromEeprom();
 
@@ -457,7 +486,23 @@ delay(100);
   //every now and then we save the settings
   saveSettings();
 
+    if (client.isConnected())
+        client.loop();
 }
+
+// recieve message
+void callback(char* topic, byte* payload, unsigned int length) {
+    char p[length + 1];
+    memcpy(p, payload, length);
+    p[length] = NULL;
+    String message(p);
+
+ 
+  String tempStatus = "mqtt message: " + message + getTime();
+  Particle.publish("googleDocs", "{\"my-name\":\"" + tempStatus + "\"}", 60, PRIVATE);
+
+}
+
 int ledToggle(String command) {
     /* Particle.functions always take a string as an argument and return an integer.
     Since we can pass a string, it means that we can give the program commands on how the function should be used.
@@ -794,7 +839,13 @@ int publishTemperature( float temperature, float humidity ) {
                                "\",\"humidity\":\"" + currentHumidityString + "\"}");
     Particle.publish("temp", buf, 60, PRIVATE);
 
-  String tempStatus = "New current temp: " + currentTempString + getTime();
+  String connectionStatus;
+  if (client.isConnected()) {
+        connectionStatus = String(" Connected ");
+    }else{
+        connectionStatus = String(" not Connected ");      
+    }
+  String tempStatus = "New current temp: " + currentTempString + connectionStatus + getTime();
   Particle.publish("googleDocs", "{\"my-name\":\"" + tempStatus + "\"}", 60, PRIVATE);
 
   return 0;
