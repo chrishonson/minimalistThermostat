@@ -1,4 +1,7 @@
 // This #include statement was automatically added by the Particle IDE.
+#include "SparkJson/SparkJson.h"
+
+// This #include statement was automatically added by the Particle IDE.
 #include "MQTT/MQTT.h"
 
 // This #include statement was automatically added by the Particle IDE.
@@ -442,8 +445,9 @@ void setup() {
     }
   // publish/subscribe
   if (client.isConnected()) {
-      // client.publish("outTopic/message","hello world");
-      client.subscribe("owntracks/#");
+    //   client.publish("outTopic/message","hello world");
+        client.subscribe("rxtest");
+        // client.subscribe("owntracks/#");
   }
 
   //restore settings from eeprom, if there were any saved before
@@ -495,14 +499,67 @@ void callback(char* topic, byte* payload, unsigned int length) {
     char p[length + 1];
     memcpy(p, payload, length);
     p[length] = NULL;
-    String message(p);
+    String message(p);//THIS LINE APPEARS TO MAKE THE p data look ok
+    debug1(message, NULL);
 
- 
-  String tempStatus = "mqtt message: " + message + getTime();
-  Particle.publish("googleDocs", "{\"my-name\":\"" + tempStatus + "\"}", 60, PRIVATE);
+    // debug1("len", length);
+ StaticJsonBuffer<500> jsonBuffer;
+
+//there's something stupid in the first character
+ JsonObject& root = jsonBuffer.parseObject(p);
+    if(!root.success()){
+        
+        String failMessage;
+        // failMessage.concat("plength:");
+        // failMessage.concat(String(length));
+        // failMessage.concat(" ");
+        for(int i =  0; i < length; i++){
+        // for(int i =  length/2; i < length; i++){
+            failMessage.concat(String(p[i], HEX));
+            // failMessage.concat(" ");
+        }
+        // failMessage.concat("end");
+        Particle.publish("googleDocs", "{\"my-name\":\"" + failMessage + "\"}", 60, PRIVATE);
+        return;
+    }
+
+const char* type   = root["_type"];
+const char* tid          = root["tid"];
+double latitude    = root["lat"];
+double longitude   = root["lon"];
+    String sType(type);
+    String sTid(tid);
+    String sLat(latitude);
+    String sLon(longitude);
+
+
+  String mqttSummaryMessage = getTime() + " mq:";
+  mqttSummaryMessage.concat("t:");
+  mqttSummaryMessage.concat(sType);
+  mqttSummaryMessage.concat(" ti:");
+  mqttSummaryMessage.concat(sTid);
+
+  mqttSummaryMessage.concat(" la:");
+  mqttSummaryMessage.concat(sLat);
+
+  mqttSummaryMessage.concat(" lo:");
+  mqttSummaryMessage.concat(sLon);
+
+
+  Particle.publish("googleDocs", "{\"my-name\":\"" + mqttSummaryMessage + "\"}", 60, PRIVATE);
 
 }
-
+// Log message to cloud, message is a printf-formatted string
+void debug1(String message, int value) {
+    char msg [50];
+    sprintf(msg, message.c_str(), value);
+    Particle.publish("DEBUG1", msg);
+}
+void debug2(String message, int value) {
+    char msg [50];
+    sprintf(msg, message.c_str(), value);
+    Particle.publish("DEBUG2", msg);
+}
 int ledToggle(String command) {
     /* Particle.functions always take a string as an argument and return an integer.
     Since we can pass a string, it means that we can give the program commands on how the function should be used.
@@ -831,13 +888,11 @@ int publishTemperature( float temperature, float humidity ) {
   //publish readings
   Particle.publish(APP_NAME, currentTempString + "°F " + currentHumidityString + "%", 60, PRIVATE);
   //post to thinkspeak
-//   Particle.publish("temp", currentTempString, PRIVATE);
-//   Particle.publish("humidity", currentHumidityString, PRIVATE);
-  
+
   char buf[1000];
     snprintf(buf, sizeof(buf), "{ \"temperature\":\"" + currentTempString + 
                                "\",\"humidity\":\"" + currentHumidityString + "\"}");
-    Particle.publish("temp", buf, 60, PRIVATE);
+    // Particle.publish("temp", buf, 60, PRIVATE);
 
   String connectionStatus;
   if (client.isConnected()) {
