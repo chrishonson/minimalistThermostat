@@ -176,15 +176,11 @@ elapsedMillis pulseTimer;
 int fan = D1;
 int heat = D2;
 int cool = D3;
-int photoresistor = A0;
-int power = A5;
-int led1 = D0;
-int led2 = D7;
-
 //TESTING_HACK
 int fanOutput;
 int heatOutput;
 int coolOutput;
+
 /*******************************************************************************
  DHT sensor
 *******************************************************************************/
@@ -210,7 +206,7 @@ float averageTemperature;
 *******************************************************************************/
 //temperature related variables - internal
 float targetTemp = 19.0;
-float currentTemp = 10.0;
+float currentTemp = 20.0;
 float currentHumidity = 0.0;
 
 //you can change this to your liking
@@ -334,7 +330,6 @@ EepromMemoryStructure eepromMemory;
 bool settingsHaveChanged = false;
 elapsedMillis settingsHaveChanged_timer;
 #define SAVE_SETTINGS_INTERVAL 10000
-int analogvalue; // Here we are declaring the integer variable analogvalue, which we will use later to store the value of the photoresistor.
 
 
 void callback(char* topic, byte* payload, unsigned int length);
@@ -358,23 +353,6 @@ void setup() {
   //publish startup message with firmware version
   Particle.publish(APP_NAME, VERSION, 60, PRIVATE);
 
-  pinMode(led1, OUTPUT);
-  pinMode(led2, OUTPUT);
-
-  // We are also going to declare a Particle.function so that we can turn the LED on and off from the cloud.
-  Particle.function("led",ledToggle);
-  // This is saying that when we ask the cloud for the function "led", it will employ the function ledToggle() from this app.
-
-  // For good measure, let's also make sure both LEDs are off when we start:
-  digitalWrite(led1, LOW);
-  digitalWrite(led2, LOW);
-  
-  //photoresistor example stuff
-  pinMode(photoresistor,INPUT);  // Our photoresistor pin is input (reading the photoresistor)
-  pinMode(power,OUTPUT); // The pin powering the photoresistor is output (sending out consistent power)
-  digitalWrite(power,HIGH);
-  Particle.variable("analogvalue", &analogvalue, INT);
-  
   //declare and init pins
   pinMode(fan, OUTPUT);
   pinMode(heat, OUTPUT);
@@ -447,7 +425,7 @@ void setup() {
   if (client.isConnected()) {
     //   client.publish("outTopic/message","hello world");
         client.subscribe("rxtest");
-        // client.subscribe("owntracks/#");
+        client.subscribe("owntracks/#");
   }
 
   //restore settings from eeprom, if there were any saved before
@@ -464,8 +442,7 @@ void dht_wrapper() { DHT.isrCallback(); }
  * Description    : this function runs continuously while the project is running
  *******************************************************************************/
 void loop() {
-analogvalue = analogRead(photoresistor);
-delay(100);
+
   //this function reads the temperature of the DHT sensor
   readTemperature();
 
@@ -493,19 +470,18 @@ delay(100);
     if (client.isConnected())
         client.loop();
 }
+// {"_type":"transition","tid":"6p","acc":16.970562,"desc":"home","event":"leave","lat":41.87135338783264,"lon":-88.15792322158813,"tst":1482157097,"wtst":1482094653,"t":"c"}
 
 // recieve message
 void callback(char* topic, byte* payload, unsigned int length) {
     char p[length + 1];
     memcpy(p, payload, length);
     p[length] = NULL;
-    String message(p);//THIS LINE APPEARS TO MAKE THE p data look ok
-    debug1(message, NULL);
+    // String message(p);//THIS LINE APPEARS TO MAKE THE p data look ok
+    // debug1(message, NULL);
 
     // debug1("len", length);
  StaticJsonBuffer<500> jsonBuffer;
-
-//there's something stupid in the first character
  JsonObject& root = jsonBuffer.parseObject(p);
     if(!root.success()){
         
@@ -555,34 +531,7 @@ void debug1(String message, int value) {
     sprintf(msg, message.c_str(), value);
     Particle.publish("DEBUG1", msg);
 }
-void debug2(String message, int value) {
-    char msg [50];
-    sprintf(msg, message.c_str(), value);
-    Particle.publish("DEBUG2", msg);
-}
-int ledToggle(String command) {
-    /* Particle.functions always take a string as an argument and return an integer.
-    Since we can pass a string, it means that we can give the program commands on how the function should be used.
-    In this case, telling the function "on" will turn the LED on and telling it "off" will turn the LED off.
-    Then, the function returns a value to us to let us know what happened.
-    In this case, it will return 1 for the LEDs turning on, 0 for the LEDs turning off,
-    and -1 if we received a totally bogus command that didn't do anything to the LEDs.
-    */
 
-    if (command=="on") {
-        digitalWrite(led1,HIGH);
-        digitalWrite(led2,HIGH);
-        return 1;
-    }
-    else if (command=="off") {
-        digitalWrite(led1,LOW);
-        digitalWrite(led2,LOW);
-        return 0;
-    }
-    else {
-        return -1;
-    }
-}
 /*******************************************************************************
  * Function Name  : setTargetTemp
  * Description    : sets the target temperature of the thermostat
