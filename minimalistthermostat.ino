@@ -408,13 +408,13 @@ void setup() {
     temperatureSamples[i] = DUMMY;
   }
 
-    // connect to the server
-    int retries = 0;
-    while(!client.isConnected() && retries < 20){
-        client.connect("m13.cloudmqtt.com", "home", "chicago");
-        retries++;
-        delay(500);
-    }
+  // connect to the server
+  int retries = 0;
+  while(!client.isConnected() && retries < 20){
+      client.connect("m13.cloudmqtt.com", "home", "chicago");
+      retries++;
+      delay(500);
+  }
   // publish/subscribe
   if (client.isConnected()) {
     //   client.publish("outTopic/message","hello world");
@@ -461,48 +461,73 @@ void loop() {
   //every now and then we save the settings
   saveSettings();
 
-    if (client.isConnected())
-        client.loop();
+  if (client.isConnected())
+      client.loop();
 }
 
 
-// {"_type":"transition","tid":"6p","acc":16.970562,"desc":"home","event":"leave","lat":41.87135338783264,"lon":-88.15792322158813,"tst":1482157097,"wtst":1482094653,"t":"c"}
 
 // recieve message
 void callback(char* topic, byte* payload, unsigned int length) {
-    char p[length + 1];
-    memcpy(p, payload, length);
-    p[length] = NULL;
-    // String message(p);//THIS LINE APPEARS TO MAKE THE p data look ok
-    // debug1(message, NULL);
+  char p[length + 1];
+  memcpy(p, payload, length);
+  p[length] = NULL;
+  // String message(p);//THIS LINE APPEARS TO MAKE THE p data look ok
+  // debug1(message, NULL);
 
-    // debug1("len", length);
- StaticJsonBuffer<500> jsonBuffer;
- JsonObject& root = jsonBuffer.parseObject(p);
-    if(!root.success()){
-        
-        String failMessage;
-        // failMessage.concat("plength:");
-        // failMessage.concat(String(length));
-        // failMessage.concat(" ");
-        for(int i =  0; i < length; i++){
-        // for(int i =  length/2; i < length; i++){
-            failMessage.concat(String(p[i], HEX));
-            // failMessage.concat(" ");
+  // debug1("len", length);
+  StaticJsonBuffer<500> jsonBuffer;
+  JsonObject& root = jsonBuffer.parseObject(p);
+  if(!root.success()){
+    failDebugMessage(p);
+    return;
+  }
+  updateUserPosition(root);
+}
+//this'll be a user class
+String user1 = "6p";
+String user2 = "5s";
+#define HOME 0;
+#define AWAY 1;
+#define THERMOSTAT_MQTT_USER_NAME "home";
+byte user1LocationStatus = HOME;
+byte user2LocationStatus = HOME;
+// {"_type":"transition","tid":"6p","acc":16.970562,"desc":"home","event":"leave",
+//"lat":41.87135338783264,"lon":-88.15792322158813,"tst":1482157097,"wtst":1482094653,"t":"c"}
+String updateUserPosition(JsonObject& mqttJson){
+  const char* type   = root["_type"];
+  const char* tid    = root["tid"];
+  const char* desc   = root["desc"];
+  const char* event  = root["event"];
+  // double latitude    = root["lat"];
+  // double longitude   = root["lon"];
+  String sType(type);
+  if (sType.equalsIgnoreCase("transition"){
+    String sDesc(desc);
+    if(sDesc.equalsIgnoreCase(THERMOSTAT_MQTT_USER_NAME)){
+      String sEvent(event);
+      String sTid(tid);
+      if(sEvent.equalsIgnoreCase("leave")){
+        if(sTid.equalsIgnoreCase(user1)){
+          user1LocationStatus = AWAY;
         }
-        // failMessage.concat("end");
-        Particle.publish("googleDocs", "{\"my-name\":\"" + failMessage + "\"}", 60, PRIVATE);
-        return;
+        else if(sTid.equalsIgnoreCase(user2)){
+          user2LocationStatus = AWAY;
+        }
+      }
+      else if(sEvent.equalsIgnoreCase("enter")){
+        if(sTid.equalsIgnoreCase(user1)){
+          user1LocationStatus = HOME;
+        }
+        else if(sTid.equalsIgnoreCase(user2)){
+          user2LocationStatus = HOME;
+        }
+      }
     }
-
-const char* type   = root["_type"];
-const char* tid          = root["tid"];
-double latitude    = root["lat"];
-double longitude   = root["lon"];
-    String sType(type);
-    String sTid(tid);
-    String sLat(latitude);
-    String sLon(longitude);
+    
+  }
+  // String sLat(latitude);
+  // String sLon(longitude);
 
 
   String mqttSummaryMessage = getTime() + " mq:";
@@ -511,14 +536,15 @@ double longitude   = root["lon"];
   mqttSummaryMessage.concat(" ti:");
   mqttSummaryMessage.concat(sTid);
 
-  mqttSummaryMessage.concat(" la:");
-  mqttSummaryMessage.concat(sLat);
+  // mqttSummaryMessage.concat(" la:");
+  // mqttSummaryMessage.concat(sLat);
 
-  mqttSummaryMessage.concat(" lo:");
-  mqttSummaryMessage.concat(sLon);
+  // mqttSummaryMessage.concat(" lo:");
+  // mqttSummaryMessage.concat(sLon);
 
 
   Particle.publish("googleDocs", "{\"my-name\":\"" + mqttSummaryMessage + "\"}", 60, PRIVATE);
+
 
 }
 // Log message to cloud, message is a printf-formatted string
@@ -527,7 +553,19 @@ void debug1(String message, int value) {
     sprintf(msg, message.c_str(), value);
     Particle.publish("DEBUG1", msg);
 }
-
+void failDebugMessage(char[]p){
+  String failMessage;
+  // failMessage.concat("plength:");
+  // failMessage.concat(String(length));
+  // failMessage.concat(" ");
+  for(int i =  0; i < length; i++){
+  // for(int i =  length/2; i < length; i++){
+  failMessage.concat(String(p[i], HEX));
+  // failMessage.concat(" ");
+  }
+  // failMessage.concat("end");
+  Particle.publish("googleDocs", "{\"my-name\":\"" + failMessage + "\"}", 60, PRIVATE);
+}
 /*******************************************************************************
  * Function Name  : setTargetTemp
  * Description    : sets the target temperature of the thermostat
