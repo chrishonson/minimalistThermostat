@@ -1,21 +1,3 @@
-// This #include statement was automatically added by the Particle IDE.
-#include "SparkJson/SparkJson.h"
-
-// This #include statement was automatically added by the Particle IDE.
-#include "MQTT/MQTT.h"
-
-// This #include statement was automatically added by the Particle IDE.
-#include "blynk/blynk.h"
-
-// This #include statement was automatically added by the Particle IDE.
-#include "FiniteStateMachine/FiniteStateMachine.h"
-
-// This #include statement was automatically added by the Particle IDE.
-#include "PietteTech_DHT/PietteTech_DHT.h"
-
-// This #include statement was automatically added by the Particle IDE.
-#include "elapsedMillis/elapsedMillis.h"
-
 //The MIT License (MIT)
 //Copyright (c) 2016 Gustavo Gonnet
 //
@@ -39,10 +21,27 @@
 // hackster: https://www.hackster.io/gusgonnet/the-minimalist-thermostat-bb0410
 
 #include "application.h"
-// #include "blynkAuthToken.h"
+#include "blynkAuthToken.h"
+// This #include statement was automatically added by the Particle IDE.
+#include "SparkJson/SparkJson.h"
+
+// This #include statement was automatically added by the Particle IDE.
+#include "MQTT/MQTT.h"
+
+// This #include statement was automatically added by the Particle IDE.
+#include "blynk/blynk.h"
+
+// This #include statement was automatically added by the Particle IDE.
+#include "FiniteStateMachine/FiniteStateMachine.h"
+
+// This #include statement was automatically added by the Particle IDE.
+#include "PietteTech_DHT/PietteTech_DHT.h"
+
+// This #include statement was automatically added by the Particle IDE.
+#include "elapsedMillis/elapsedMillis.h"
 
 #define APP_NAME "Thermostat"
-String VERSION = "Version 0.24";
+String VERSION = "Version 0.25";
 /*******************************************************************************
  * changes in version 0.09:
        * reorganized code to group functions
@@ -273,7 +272,6 @@ bool testing = false;
  replace with your project auth token (the blynk app will give you one)
 *******************************************************************************/
 #define USE_BLYNK "no"
-#define BLYNK_AUTH_TOKEN "notused"
 char auth[] = BLYNK_AUTH_TOKEN;
 
 //definitions for the blynk interface
@@ -331,9 +329,7 @@ bool settingsHaveChanged = false;
 elapsedMillis settingsHaveChanged_timer;
 #define SAVE_SETTINGS_INTERVAL 10000
 
-
 void callback(char* topic, byte* payload, unsigned int length);
-
 /**
  * if want to use IP address,
  * byte server[] = { XXX,XXX,XXX,XXX };
@@ -341,9 +337,7 @@ void callback(char* topic, byte* payload, unsigned int length);
  * want to use domain name,
  * MQTT client("www.sample.com", 1883, callback);
  **/
-// MQTT client;
  MQTT client("m13.cloudmqtt.com", 16619, callback);
-
 /*******************************************************************************
  * Function Name  : setup
  * Description    : this function runs once at system boot
@@ -470,6 +464,8 @@ void loop() {
     if (client.isConnected())
         client.loop();
 }
+
+
 // {"_type":"transition","tid":"6p","acc":16.970562,"desc":"home","event":"leave","lat":41.87135338783264,"lon":-88.15792322158813,"tst":1482157097,"wtst":1482094653,"t":"c"}
 
 // recieve message
