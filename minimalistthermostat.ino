@@ -127,7 +127,7 @@ TODO:
 
 #define PUSHBULLET_NOTIF_HOME "pushbulletHOME"         //-> family group in pushbullet
 #define PUSHBULLET_NOTIF_PERSONAL "pushbulletPERSONAL" //-> only my phone
-const int TIME_ZONE = -4;
+const int TIME_ZONE = -6;
 
 /*******************************************************************************
  initialize FSM states with proper enter, update and exit functions
@@ -271,7 +271,7 @@ bool testing = false;
   #define BLYNK_AUTH_TOKEN "1234567890123456789012345678901234567890"
  replace with your project auth token (the blynk app will give you one)
 *******************************************************************************/
-#define USE_BLYNK "no"
+#define USE_BLYNK "yes"
 char auth[] = BLYNK_AUTH_TOKEN;
 
 //definitions for the blynk interface
@@ -464,49 +464,32 @@ void loop() {
   if (client.isConnected())
       client.loop();
 }
+void updateUserPosition(JsonObject& mqttJson);
+// {"_type":"transition","tid":"6p","acc":16.970562,"desc":"home","event":"leave",
+// //"lat":41.87135338783264,"lon":-88.15792322158813,"tst":1482157097,"wtst":1482094653,"t":"c"}
 
-
-
-// recieve message
-void callback(char* topic, byte* payload, unsigned int length) {
-  char p[length + 1];
-  memcpy(p, payload, length);
-  p[length] = NULL;
-  // String message(p);//THIS LINE APPEARS TO MAKE THE p data look ok
-  // debug1(message, NULL);
-
-  // debug1("len", length);
-  StaticJsonBuffer<500> jsonBuffer;
-  JsonObject& root = jsonBuffer.parseObject(p);
-  if(!root.success()){
-    failDebugMessage(p);
-    return;
-  }
-  updateUserPosition(root);
-}
 //this'll be a user class
 String user1 = "6p";
 String user2 = "5s";
-#define HOME 0;
-#define AWAY 1;
-#define THERMOSTAT_MQTT_USER_NAME "home";
-byte user1LocationStatus = HOME;
-byte user2LocationStatus = HOME;
-// {"_type":"transition","tid":"6p","acc":16.970562,"desc":"home","event":"leave",
-//"lat":41.87135338783264,"lon":-88.15792322158813,"tst":1482157097,"wtst":1482094653,"t":"c"}
-String updateUserPosition(JsonObject& mqttJson){
-  const char* type   = root["_type"];
-  const char* tid    = root["tid"];
-  const char* desc   = root["desc"];
-  const char* event  = root["event"];
+#define HOME "home"
+#define AWAY "away"
+#define THERMOSTAT_MQTT_USER_NAME "home"
+String user1LocationStatus = HOME;
+String user2LocationStatus = HOME;
+void updateUserPosition(JsonObject& mqttJson){
+  const char* type   = mqttJson["_type"];
+  const char* tid    = mqttJson["tid"];
+  const char* desc   = mqttJson["desc"];
+  const char* event  = mqttJson["event"];
   // double latitude    = root["lat"];
   // double longitude   = root["lon"];
   String sType(type);
-  if (sType.equalsIgnoreCase("transition"){
+  String sTid(tid);
+  if (sType.equalsIgnoreCase("transition")){
     String sDesc(desc);
     if(sDesc.equalsIgnoreCase(THERMOSTAT_MQTT_USER_NAME)){
       String sEvent(event);
-      String sTid(tid);
+
       if(sEvent.equalsIgnoreCase("leave")){
         if(sTid.equalsIgnoreCase(user1)){
           user1LocationStatus = AWAY;
@@ -526,9 +509,6 @@ String updateUserPosition(JsonObject& mqttJson){
     }
     
   }
-  // String sLat(latitude);
-  // String sLon(longitude);
-
 
   String mqttSummaryMessage = getTime() + " mq:";
   mqttSummaryMessage.concat("t:");
@@ -536,24 +516,39 @@ String updateUserPosition(JsonObject& mqttJson){
   mqttSummaryMessage.concat(" ti:");
   mqttSummaryMessage.concat(sTid);
 
-  // mqttSummaryMessage.concat(" la:");
-  // mqttSummaryMessage.concat(sLat);
-
-  // mqttSummaryMessage.concat(" lo:");
-  // mqttSummaryMessage.concat(sLon);
-
+  mqttSummaryMessage.concat(" u1:");
+  mqttSummaryMessage.concat(user1LocationStatus);
+  mqttSummaryMessage.concat(" u2:");
+  mqttSummaryMessage.concat(user2LocationStatus);
 
   Particle.publish("googleDocs", "{\"my-name\":\"" + mqttSummaryMessage + "\"}", 60, PRIVATE);
-
-
 }
+// recieve message
+void callback(char* topic, byte* payload, unsigned int length) {
+  char p[length + 1];
+  memcpy(p, payload, length);
+  p[length] = NULL;
+  // String message(p);//THIS LINE APPEARS TO MAKE THE p data look ok
+  // debug1(message, NULL);
+
+  // debug1("len", length);
+  StaticJsonBuffer<500> jsonBuffer;
+  JsonObject& root = jsonBuffer.parseObject(p);
+  if(!root.success()){
+    failDebugMessage(p, length);
+    return;
+  }
+  updateUserPosition(root);
+}
+
+
 // Log message to cloud, message is a printf-formatted string
 void debug1(String message, int value) {
     char msg [50];
     sprintf(msg, message.c_str(), value);
     Particle.publish("DEBUG1", msg);
 }
-void failDebugMessage(char[]p){
+void failDebugMessage(char* p, unsigned int length){
   String failMessage;
   // failMessage.concat("plength:");
   // failMessage.concat(String(length));
@@ -844,7 +839,16 @@ int readTemperature() {
 
   return 0;
 }
-
+#ifndef USE_FERENHEIGHT
+#define USE_FERENHEIGHT false
+#endif
+float userUnits(float temperature){
+  if(USE_FERENHEIGHT){
+    return (1.8 * temperature) + 32;//convert to f
+  }else{
+    return temperature;
+  }
+}
 /*******************************************************************************
  * Function Name  : publishTemperature
  * Description    : the temperature/humidity passed as parameters get stored in internal variables
@@ -855,7 +859,8 @@ int publishTemperature( float temperature, float humidity ) {
 
 
   char currentTempChar[32];
-  currentTemp = (1.8 * temperature) + 32;//convert to f
+  currentTemp = userUnits(temperature);
+
   int currentTempDecimals = (currentTemp - (int)currentTemp) * 100;
   sprintf(currentTempChar,"%0d.%d", (int)currentTemp, currentTempDecimals);
 
@@ -869,7 +874,7 @@ int publishTemperature( float temperature, float humidity ) {
   currentHumidityString = String(currentHumidityChar);
 
   //publish readings
-  Particle.publish(APP_NAME, currentTempString + "°F " + currentHumidityString + "%", 60, PRIVATE);
+  Particle.publish(APP_NAME, currentTempString + "°C " + currentHumidityString + "%", 60, PRIVATE);
   //post to thinkspeak
 
   char buf[1000];
@@ -883,7 +888,8 @@ int publishTemperature( float temperature, float humidity ) {
     }else{
         connectionStatus = String(" not Connected ");      
     }
-  String tempStatus = "New current temp: " + currentTempString + connectionStatus + getTime();
+  String tempStatus = getTime() + " " + connectionStatus + 
+  " temp:" + currentTempString + " humidity:" + currentHumidityString;
   Particle.publish("googleDocs", "{\"my-name\":\"" + tempStatus + "\"}", 60, PRIVATE);
 
   return 0;
