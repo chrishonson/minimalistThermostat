@@ -204,7 +204,7 @@ float averageTemperature;
  thermostat related declarations
 *******************************************************************************/
 //temperature related variables - internal
-float targetTemp = 19.0;
+
 float currentTemp = 20.0;
 float currentHumidity = 0.0;
 
@@ -218,15 +218,18 @@ float margin = 0.25;
 //use this variable to align measurements with your existing thermostat
 float temperatureCalibration = -1.35;
 
-//temperature related variables - to be exposed in the cloud
-String targetTempString = String(targetTemp); //String to store the target temp so it can be exposed and set
 String currentTempString = String(currentTemp); //String to store the sensor's temp so it can be exposed
 String currentHumidityString = String(currentHumidity); //String to store the sensor's humidity so it can be exposed
-
-#define DEBOUNCE_SETTINGS 4000
-#define DEBOUNCE_SETTINGS_MODE 8000 //give more time to the MODE change
 float newTargetTemp = 19.0;
 elapsedMillis setNewTargetTempTimer;
+float targetTemp = 19.0;
+String targetTempString = String(targetTemp); //String to store the target temp so it can be exposed and set
+
+
+float newTargetAwayTemp = 19.0;
+elapsedMillis setNewTargetAwayTempTimer;
+float targetAwayTemp = 19.0;
+String targetAwayTempString = String(targetAwayTemp); //String to store the target temp so it can be exposed and set
 
 bool externalFan = false;
 bool internalFan = false;
@@ -279,6 +282,7 @@ char auth[] = BLYNK_AUTH_TOKEN;
 #define BLYNK_DISPLAY_HUMIDITY V1
 #define BLYNK_DISPLAY_TARGET_TEMP V2
 #define BLYNK_SLIDER_TEMP V10
+#define BLYNK_SLIDER_AWAY_TEMP V14
 
 #define BLYNK_BUTTON_FAN V11
 #define BLYNK_LED_FAN V3
@@ -446,6 +450,7 @@ void loop() {
   }
 
   updateTargetTemp();
+  updateTargetAwayTemp();
   updateFanStatus();
   updatePulseStatus();
   updateMode();
@@ -561,6 +566,9 @@ void failDebugMessage(char* p, unsigned int length){
   // failMessage.concat("end");
   Particle.publish("googleDocs", "{\"my-name\":\"" + failMessage + "\"}", 60, PRIVATE);
 }
+#define DEBOUNCE_SETTINGS 4000
+#define DEBOUNCE_SETTINGS_MODE 8000 //give more time to the MODE change
+
 /*******************************************************************************
  * Function Name  : setTargetTemp
  * Description    : sets the target temperature of the thermostat
@@ -596,7 +604,32 @@ int setTargetTemp(String temp)
   Particle.publish("googleDocs", "{\"my-name\":\"" + tempStatus + "\"}", 60, PRIVATE);
   return -1;
 }
+int setTargetAwayTemp(String temp)
+{
+  float tmpFloat = temp.toFloat();
+  //update the target temp only in the case the conversion to float works
+  // (toFloat returns 0 if there is a problem in the conversion)
+  // sorry, if you wanted to set 0 as the target temp, you can't :)
+  if ( tmpFloat > 0 ) {
+    //newTargetTemp will be copied to targetTemp moments after in function updateTargetTemp()
+    // this is to 1-debounce the blynk slider I use and 2-debounce the user changing his/her mind quickly
+    newTargetAwayTemp = tmpFloat;
+    //start timer to debounce this new setting
+    setNewTargetAwayTempTimer = 0;
+    return 0;
+  }
 
+  //show only 2 decimals in notifications
+  // Example: show 19.00 instead of 19.000000
+  temp = temp.substring(0, temp.length()-4);
+
+  //if the execution reaches here then the value was invalid
+  //Particle.publish(APP_NAME, "ERROR: Failed to set new target temp to " + temp, 60, PRIVATE);
+//  Particle.publish(PUSHBULLET_NOTIF_PERSONAL, "ERROR: Failed to set new target temp to " + temp + getTime(), 60, PRIVATE);
+  String tempStatus = "ERROR: Failed to set new away target temp to " + temp + getTime();
+  Particle.publish("googleDocs", "{\"my-name\":\"" + tempStatus + "\"}", 60, PRIVATE);
+  return -1;
+}
 /*******************************************************************************
  * Function Name  : updateTargetTemp
  * Description    : updates the value of target temperature of the thermostat
@@ -622,7 +655,25 @@ void updateTargetTemp()
   String tempStatus = "New target temp: " + targetTempString + "°C" + getTime();
   Particle.publish("googleDocs", "{\"my-name\":\"" + tempStatus + "\"}", 60, PRIVATE);
 }
+void updateTargetAwayTemp()
+{
+  //debounce the new setting
+  if (setNewTargetAwayTempTimer < DEBOUNCE_SETTINGS) {
+    return;
+  }
+  //is there anything to update?
+  if (targetAwayTemp == newTargetAwayTemp) {
+    return;
+  }
 
+  targetAwayTemp = newTargetAwayTemp;
+  targetAwayTempString = float2string(targetAwayTemp);
+
+  //Particle.publish(APP_NAME, "New target temp: " + targetTempString, 60, PRIVATE);
+  //Particle.publish(PUSHBULLET_NOTIF_PERSONAL, "New target temp: " + targetTempString + "°C" + getTime(), 60, PRIVATE);
+  String tempStatus = "New target Away temp: " + targetAwayTempString + "°C" + getTime();
+  Particle.publish("googleDocs", "{\"my-name\":\"" + tempStatus + "\"}", 60, PRIVATE);
+}
 /*******************************************************************************
  * Function Name  : float2string
  * Description    : return the string representation of the float number
@@ -1341,7 +1392,12 @@ BLYNK_WRITE(BLYNK_SLIDER_TEMP) {
   setTargetTemp(param.asStr());
   flagSettingsHaveChanged();
 }
-
+BLYNK_WRITE(BLYNK_SLIDER_AWAY_TEMP) {
+  //this is the blynk slider
+  // source: http://docs.blynk.cc/#widgets-controllers-slider
+  setTargetAwayTemp(param.asStr());
+  flagSettingsHaveChanged();
+}
 BLYNK_WRITE(BLYNK_BUTTON_FAN) {
   //flip fan status, if it's on switch it off and viceversa
   // do this only when blynk sends a 1
