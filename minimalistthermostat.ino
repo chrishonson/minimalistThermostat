@@ -168,20 +168,15 @@ float currentHumidity = 0.0;
 String currentTempString = String(currentTemp); //String to store the sensor's temp so it can be exposed
 String currentHumidityString = String(currentHumidity); //String to store the sensor's humidity so it can be exposed
 float newTargetTemp = 19.0;
-elapsedMillis setNewTargetTempTimer;
 float targetTemp = 19.0;
 String targetTempString = String(targetTemp); //String to store the target temp so it can be exposed and set
 
 
 float newTargetAwayTemp = 19.0;
-elapsedMillis setNewTargetAwayTempTimer;
 float targetAwayTemp = 19.0;
 String targetAwayTempString = String(targetAwayTemp); //String to store the target temp so it can be exposed and set
 
-bool externalFan = false;
-bool internalFan = false;
-bool fanButtonClick = false;
-elapsedMillis fanButtonClickTimer;
+
 
 bool externalPulse = false;
 bool internalPulse = false;
@@ -256,23 +251,8 @@ WidgetLED pulseLed(BLYNK_LED_PULSE); //register led to virtual pin 6
 
 //enable the user code (our program below) to run in parallel with cloud connectivity code
 // source: https://docs.particle.io/reference/firmware/photon/#system-thread
-//SYSTEM_THREAD(ENABLED);
+SYSTEM_THREAD(ENABLED);
 
-/*******************************************************************************
- structure for writing thresholds in eeprom
- https://docs.particle.io/reference/firmware/photon/#eeprom
-*******************************************************************************/
-//randomly chosen value here. The only thing that matters is that it's not 255
-// since 255 is the default value for uninitialized eeprom
-// I used 137 and 138 in version 0.21 already
-#define EEPROM_VERSION 139
-#define EEPROM_ADDRESS 0
-
-
-
-bool settingsHaveChanged = false;
-elapsedMillis settingsHaveChanged_timer;
-#define SAVE_SETTINGS_INTERVAL 10000
 
 void callback(char* topic, byte* payload, unsigned int length);
 /**
@@ -344,6 +324,7 @@ void setup() {
     //init Blynk
     Blynk.begin(auth);
   }
+ 
 
   Time.zone(TIME_ZONE);
 
@@ -354,6 +335,7 @@ void setup() {
   while(!client.isConnected() && retries < 20){
       client.connect("m13.cloudmqtt.com", "home", "chicago");
       retries++;
+       
       delay(500);
   }
   // publish/subscribe
@@ -375,35 +357,39 @@ void setup() {
  * Description    : this function runs continuously while the project is running
  *******************************************************************************/
 void loop() {
-
   //this function reads the temperature of the DHT sensor
   readTemperature();
+ 
 
   if (USE_BLYNK == "yes") {
     //all the Blynk magic happens here
     Blynk.run();
   }
-
+ 
   updateTargetTemp();
   updateTargetAwayTemp();
   updateFanStatus();
   updatePulseStatus();
   updateMode();
-
+ 
   //this function updates the FSM
   // the FSM is the heart of the thermostat - all actions are defined by its states
   thermostatStateMachine.update();
+ 
 
   //publish readings to the blynk server every minute so the History Graph gets updated
   // even when the blynk app is not on (running) in the users phone
   updateBlynkCloud();
+ 
 
   //every now and then we save the settings
   saveSettings();
+ 
 
   if (client.isConnected())
       client.loop();
 }
+
 void updateUserPosition(JsonObject& mqttJson);
 // {"_type":"transition","tid":"6p","acc":16.970562,"desc":"home","event":"leave",
 // //"lat":41.87135338783264,"lon":-88.15792322158813,"tst":1482157097,"wtst":1482094653,"t":"c"}
@@ -513,6 +499,7 @@ void failDebugMessage(char* p, unsigned int length){
                     allow the users to change their mind
 * Return         : 0 if all is good, or -1 if the parameter does not match on or off
  *******************************************************************************/
+elapsedMillis setNewTargetTempTimer;
 int setTargetTemp(String temp)
 {
   float tmpFloat = temp.toFloat();
@@ -539,6 +526,8 @@ int setTargetTemp(String temp)
   Particle.publish("googleDocs", "{\"my-name\":\"" + tempStatus + "\"}", 60, PRIVATE);
   return -1;
 }
+
+elapsedMillis setNewTargetAwayTempTimer;
 int setTargetAwayTemp(String temp)
 {
   float tmpFloat = temp.toFloat();
@@ -626,6 +615,10 @@ String float2string( float floatNumber )
   return stringNumber;
 }
 
+bool externalFan = false;
+bool internalFan = false;
+bool fanButtonClick = false;
+elapsedMillis fanButtonClickTimer;
 /*******************************************************************************
  * Function Name  : updateFanStatus
  * Description    : updates the status of the fan moments after it was set
@@ -1559,7 +1552,9 @@ void updateBlynkCloud() {
 /********  https://docs.particle.io/reference/firmware/photon/#eeprom  *********/
 /*******************************************************************************/
 /*******************************************************************************/
+bool settingsHaveChanged = false;
 
+elapsedMillis settingsHaveChanged_timer;
 /*******************************************************************************
  * Function Name  : flagSettingsHaveChanged
  * Description    : this function gets called when the user of the blynk app
@@ -1573,9 +1568,20 @@ void flagSettingsHaveChanged()
   settingsHaveChanged_timer = 0;
 
 }
+/*******************************************************************************
+ structure for writing thresholds in eeprom
+ https://docs.particle.io/reference/firmware/photon/#eeprom
+*******************************************************************************/
+//randomly chosen value here. The only thing that matters is that it's not 255
+// since 255 is the default value for uninitialized eeprom
+// I used 137 and 138 in version 0.21 already
+#define EEPROM_VERSION 140
+#define EEPROM_ADDRESS 0
 struct EepromMemoryStructure {
   uint8_t version = EEPROM_VERSION;
   uint8_t targetTemp;
+  uint8_t targetAwaySummerTemp;
+  uint8_t targetAwayWinterTemp;
   uint8_t internalFan;
   uint8_t internalMode;
 };
@@ -1587,7 +1593,6 @@ EepromMemoryStructure eepromMemory;
  *******************************************************************************/
 void readFromEeprom()
 {
-
   EepromMemoryStructure myObj;
   EEPROM.get(EEPROM_ADDRESS, myObj);
 
@@ -1599,6 +1604,14 @@ void readFromEeprom()
     targetTemp = float( myObj.targetTemp );
     newTargetTemp = targetTemp;
     targetTempString = float2string(targetTemp);
+
+    targetAwayTemp = float( myObj.targetAwaySummerTemp );
+    newTargetAwayTemp = targetAwayTemp;
+    targetAwayTempString = float2string(targetAwayTemp);
+
+    // targetTemp = float( myObj.targetTemp );
+    // newTargetTemp = targetTemp;
+    // targetTempString = float2string(targetTemp);
 
     internalMode = convertIntToMode( myObj.internalMode );
     externalMode = internalMode;
@@ -1624,8 +1637,8 @@ void readFromEeprom()
                     Remember that each eeprom writing cycle is a precious and finite resource
  * Return         : none
  *******************************************************************************/
+ #define SAVE_SETTINGS_INTERVAL 10000
 void saveSettings() {
-
   //if the thermostat is initializing, get out of here
   if ( thermostatStateMachine.isInState(initState) ) {
     return;
@@ -1648,6 +1661,8 @@ void saveSettings() {
   //store thresholds in the struct type that will be saved in the eeprom
   eepromMemory.version = EEPROM_VERSION;
   eepromMemory.targetTemp = uint8_t(targetTemp);
+  eepromMemory.targetAwayWinterTemp = uint8_t(targetAwayTemp);
+  eepromMemory.targetAwaySummerTemp = uint8_t(targetAwayTemp);
   eepromMemory.internalMode = convertModeToInt(internalMode);
 
   eepromMemory.internalFan = 0;
