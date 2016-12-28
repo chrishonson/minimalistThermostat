@@ -141,28 +141,6 @@ State coolingState = State( coolingEnterFunction, coolingUpdateFunction, cooling
 //initialize state machine, start in state: Idle
 FSM thermostatStateMachine = FSM(initState);
 
-//milliseconds for the init cycle, so temperature samples get stabilized
-//this should be in the order of the 5 minutes: 5*60*1000==300000
-//for now, I will use 1 minute
-#define INIT_TIMEOUT 60000
-elapsedMillis initTimer;
-
-//minimum number of milliseconds to leave the heating element on
-// to protect on-off on the fan and the heating/cooling elements
-#define MINIMUM_ON_TIMEOUT 60000
-elapsedMillis minimumOnTimer;
-
-//minimum number of milliseconds to leave the system in idle state
-// to protect the fan and the heating/cooling elements
-#define MINIMUM_IDLE_TIMEOUT 60000
-elapsedMillis minimumIdleTimer;
-
-//milliseconds to pulse on the heating = 600 seconds = 10 minutes
-// turns the heating on for a certain time
-// comes in handy when you want to warm up the house a little bit
-#define PULSE_TIMEOUT 600000
-elapsedMillis pulseTimer;
-
 /*******************************************************************************
  IO mapping
 *******************************************************************************/
@@ -181,42 +159,11 @@ int heatOutput;
 int coolOutput;
 
 /*******************************************************************************
- DHT sensor
-*******************************************************************************/
-#define DHTTYPE  DHT22                // Sensor type DHT11/21/22/AM2301/AM2302
-#define DHTPIN   4                    // Digital pin for communications
-#define DHT_SAMPLE_INTERVAL   5000    // Sample room temperature every 5 seconds
-                                      //  this is then averaged in temperatureAverage
-void dht_wrapper(); // must be declared before the lib initialization
-PietteTech_DHT DHT(DHTPIN, DHTTYPE, dht_wrapper);
-bool bDHTstarted;       // flag to indicate we started acquisition
-elapsedMillis dhtSampleInterval;
-// how many samples to take and average, more takes longer but measurement is smoother
-const int NUMBER_OF_SAMPLES = 10;
-//const float DUMMY = -100;
-//const float DUMMY_ARRAY[NUMBER_OF_SAMPLES] = { DUMMY, DUMMY, DUMMY, DUMMY, DUMMY, DUMMY, DUMMY, DUMMY, DUMMY, DUMMY };
-#define DUMMY -100
-#define DUMMY_ARRAY { DUMMY, DUMMY, DUMMY, DUMMY, DUMMY, DUMMY, DUMMY, DUMMY, DUMMY, DUMMY };
-float temperatureSamples[NUMBER_OF_SAMPLES] = DUMMY_ARRAY;
-float averageTemperature;
-
-/*******************************************************************************
  thermostat related declarations
 *******************************************************************************/
 //temperature related variables - internal
-
 float currentTemp = 20.0;
 float currentHumidity = 0.0;
-
-//you can change this to your liking
-// a smaller value will make your temperature more constant at the price of
-//  starting the heat more times
-// a larger value will reduce the number of times the HVAC comes on but will leave it on a longer time
-float margin = 0.25;
-
-//sensor difference with real temperature (if none set to zero)
-//use this variable to align measurements with your existing thermostat
-float temperatureCalibration = -1.35;
 
 String currentTempString = String(currentTemp); //String to store the sensor's temp so it can be exposed
 String currentHumidityString = String(currentHumidity); //String to store the sensor's humidity so it can be exposed
@@ -321,13 +268,7 @@ WidgetLED pulseLed(BLYNK_LED_PULSE); //register led to virtual pin 6
 #define EEPROM_VERSION 139
 #define EEPROM_ADDRESS 0
 
-struct EepromMemoryStructure {
-  uint8_t version = EEPROM_VERSION;
-  uint8_t targetTemp;
-  uint8_t internalFan;
-  uint8_t internalMode;
-};
-EepromMemoryStructure eepromMemory;
+
 
 bool settingsHaveChanged = false;
 elapsedMillis settingsHaveChanged_timer;
@@ -406,11 +347,7 @@ void setup() {
 
   Time.zone(TIME_ZONE);
 
-  //reset samples array to default so we fill it up with new samples
-  uint8_t i;
-  for (i=0; i<NUMBER_OF_SAMPLES; i++) {
-    temperatureSamples[i] = DUMMY;
-  }
+  resetSamplesArray();
 
   // connect to the server
   int retries = 0;
@@ -431,8 +368,6 @@ void setup() {
 
 }
 
-// This wrapper is in charge of calling the DHT sensor lib
-void dht_wrapper() { DHT.isrCallback(); }
 
 
 /*******************************************************************************
@@ -807,13 +742,46 @@ void updateMode()
   Particle.publish("googleDocs", "{\"my-name\":\"" + tempStatus + "\"}", 60, PRIVATE);
 
 }
+/*******************************************************************************
+ DHT sensor
+*******************************************************************************/
+#define DHTTYPE  DHT22                // Sensor type DHT11/21/22/AM2301/AM2302
+#define DHTPIN   4                    // Digital pin for communications
+#define DHT_SAMPLE_INTERVAL   5000    // Sample room temperature every 5 seconds
+                                      //  this is then averaged in temperatureAverage
+void dht_wrapper(); // must be declared before the lib initialization
+PietteTech_DHT DHT(DHTPIN, DHTTYPE, dht_wrapper);
+bool bDHTstarted;       // flag to indicate we started acquisition
+elapsedMillis dhtSampleInterval;
+// how many samples to take and average, more takes longer but measurement is smoother
+const int NUMBER_OF_SAMPLES = 10;
+//const float DUMMY = -100;
+//const float DUMMY_ARRAY[NUMBER_OF_SAMPLES] = { DUMMY, DUMMY, DUMMY, DUMMY, DUMMY, DUMMY, DUMMY, DUMMY, DUMMY, DUMMY };
+#define DUMMY -100
+#define DUMMY_ARRAY { DUMMY, DUMMY, DUMMY, DUMMY, DUMMY, DUMMY, DUMMY, DUMMY, DUMMY, DUMMY };
+float temperatureSamples[NUMBER_OF_SAMPLES] = DUMMY_ARRAY;
+float averageTemperature;
 
+// This wrapper is in charge of calling the DHT sensor lib
+void dht_wrapper() { DHT.isrCallback(); }
+
+void resetSamplesArray(){
+  //reset samples array to default so we fill it up with new samples
+  uint8_t i;
+  for (i=0; i<NUMBER_OF_SAMPLES; i++) {
+    temperatureSamples[i] = DUMMY;
+  }
+}
 /*******************************************************************************
  * Function Name  : readTemperature
  * Description    : reads the temperature of the DHT22 sensor at every DHT_SAMPLE_INTERVAL
                     if testing the app, it returns right away
  * Return         : 0
  *******************************************************************************/
+
+//sensor difference with real temperature (if none set to zero)
+//use this variable to align measurements with your existing thermostat
+float temperatureCalibration = -1.35;
 int readTemperature() {
 
   //TESTING_HACK
@@ -954,6 +922,11 @@ int publishTemperature( float temperature, float humidity ) {
 ********************************************************************************
 ********************************************************************************
 *******************************************************************************/
+//milliseconds for the init cycle, so temperature samples get stabilized
+//this should be in the order of the 5 minutes: 5*60*1000==300000
+//for now, I will use 1 minute
+#define INIT_TIMEOUT 60000
+elapsedMillis initTimer;
 void initEnterFunction(){
   //start the timer of this cycle
   initTimer = 0;
@@ -969,7 +942,10 @@ void initUpdateFunction(){
 void initExitFunction(){
   Particle.publish(APP_NAME, "Initialization done", 60, PRIVATE);
 }
-
+//minimum number of milliseconds to leave the system in idle state
+// to protect the fan and the heating/cooling elements
+#define MINIMUM_IDLE_TIMEOUT 60000
+elapsedMillis minimumIdleTimer;
 void idleEnterFunction(){
   //set the state
   setState(STATE_IDLE);
@@ -984,6 +960,12 @@ void idleEnterFunction(){
   //start the minimum timer of this cycle
   minimumIdleTimer = 0;
 }
+
+//you can change this to your liking
+// a smaller value will make your temperature more constant at the price of
+//  starting the heat more times
+// a larger value will reduce the number of times the HVAC comes on but will leave it on a longer time
+float margin = 0.25;
 void idleUpdateFunction(){
   //set the fan output to the internalFan ONLY in this state of the FSM
   // since other states might need the fan on
@@ -1035,7 +1017,10 @@ void idleUpdateFunction(){
 }
 void idleExitFunction(){
 }
-
+//minimum number of milliseconds to leave the heating element on
+// to protect on-off on the fan and the heating/cooling elements
+#define MINIMUM_ON_TIMEOUT 60000
+elapsedMillis minimumOnTimer;
 void heatingEnterFunction(){
   //set the state
   setState(STATE_HEATING);
@@ -1050,6 +1035,7 @@ void heatingEnterFunction(){
   //start the minimum timer of this cycle
   minimumOnTimer = 0;
 }
+
 void heatingUpdateFunction(){
   //is minimum time up?
   if (minimumOnTimer < MINIMUM_ON_TIMEOUT) {
@@ -1084,6 +1070,11 @@ void heatingExitFunction(){
  * Description    : turns the HVAC on for a certain time
                     comes in handy when you want to warm up/cool down the house a little bit
  *******************************************************************************/
+//milliseconds to pulse on the heating = 600 seconds = 10 minutes
+// turns the heating on for a certain time
+// comes in handy when you want to warm up the house a little bit
+#define PULSE_TIMEOUT 600000
+elapsedMillis pulseTimer;
 void pulseEnterFunction(){
   //Particle.publish(PUSHBULLET_NOTIF_PERSONAL, "Pulse on" + getTime(), 60, PRIVATE);
   String tempStatus = "Pulse on" + getTime();
@@ -1582,7 +1573,13 @@ void flagSettingsHaveChanged()
   settingsHaveChanged_timer = 0;
 
 }
-
+struct EepromMemoryStructure {
+  uint8_t version = EEPROM_VERSION;
+  uint8_t targetTemp;
+  uint8_t internalFan;
+  uint8_t internalMode;
+};
+EepromMemoryStructure eepromMemory;
 /*******************************************************************************
  * Function Name  : readFromEeprom
  * Description    : retrieves the settings from the EEPROM memory
