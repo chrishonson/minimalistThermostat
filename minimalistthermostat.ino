@@ -177,12 +177,6 @@ float targetAwayTemp = 19.0;
 String targetAwayTempString = String(targetAwayTemp); //String to store the target temp so it can be exposed and set
 
 
-
-bool externalPulse = false;
-bool internalPulse = false;
-bool pulseButtonClick = false;
-elapsedMillis pulseButtonClickTimer;
-
 //here are the possible modes the thermostat can be in: off/heat/cool
 #define MODE_OFF "Off"
 #define MODE_HEAT "Heating"
@@ -223,6 +217,7 @@ char auth[] = BLYNK_AUTH_TOKEN;
 #define BLYNK_DISPLAY_CURRENT_TEMP V0
 #define BLYNK_DISPLAY_HUMIDITY V1
 #define BLYNK_DISPLAY_TARGET_TEMP V2
+#define BLYNK_DISPLAY_TARGET_AWAY_TEMP V15
 #define BLYNK_SLIDER_TEMP V10
 #define BLYNK_SLIDER_AWAY_TEMP V14
 
@@ -659,6 +654,10 @@ void updateFanStatus()
   }
 }
 
+bool externalPulse = false;
+bool internalPulse = false;
+bool pulseButtonClick = false;
+elapsedMillis pulseButtonClickTimer;
 /*******************************************************************************
  * Function Name  : updatePulseStatus
  * Description    : updates the status of the pulse of the thermostat
@@ -1321,6 +1320,11 @@ BLYNK_READ(BLYNK_DISPLAY_TARGET_TEMP) {
   // source: http://docs.blynk.cc/#widgets-displays-value-display
   Blynk.virtualWrite(BLYNK_DISPLAY_TARGET_TEMP, targetTemp);
 }
+BLYNK_READ(BLYNK_DISPLAY_TARGET_AWAY_TEMP) {
+  //this is a blynk value display
+  // source: http://docs.blynk.cc/#widgets-displays-value-display
+  Blynk.virtualWrite(BLYNK_DISPLAY_TARGET_AWAY_TEMP, targetAwayTemp);
+}
 BLYNK_READ(BLYNK_LED_FAN) {
   //this is a blynk led
   // source: http://docs.blynk.cc/#widgets-displays-led
@@ -1527,6 +1531,7 @@ void updateBlynkCloud() {
     }
 
     Blynk.virtualWrite(BLYNK_DISPLAY_TARGET_TEMP, targetTemp);
+    Blynk.virtualWrite(BLYNK_DISPLAY_TARGET_AWAY_TEMP, targetAwayTemp);
 
     if ( externalPulse ) {
       pulseLed.on();
