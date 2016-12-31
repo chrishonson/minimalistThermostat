@@ -106,7 +106,7 @@ String VERSION = "Version 0.25";
              this saves eeprom pages to be written more often than needed
              (for instance a float takes 4 bytes and an uint8_t takes only 1)
  * changes in version 0.22:
-           * fixed an issue with atHomeMinimumString, when rebooting the photon would not show the
+           * fixed an issue with homeMinString, when rebooting the photon would not show the
              temperature loaded from the eeprom
  * changes in version 0.23:
            * Swapped pushbullet notifications with google sheets on thermostat activity
@@ -167,14 +167,21 @@ float currentHumidity = 0.0;
 String currentTempString = String(currentTemp); //String to store the sensor's temp so it can be exposed
 String currentHumidityString = String(currentHumidity); //String to store the sensor's humidity so it can be exposed
 
-float newAtHomeMinimumTemp = 19.0;
+float newHomeMinTemp = 19.0;
 float homeMinTemp = 19.0;
-String atHomeMinimumString = String(homeMinTemp); //String to store the target temp so it can be exposed and set
+String homeMinString = String(homeMinTemp); 
 
-float newTargetAwayTemp = 19.0;
-float targetAwayTemp = 19.0;
-String targetAwayTempString = String(targetAwayTemp); //String to store the target temp so it can be exposed and set
+float newAwayMinTemp = 19.0;
+float awayMinTemp = 19.0;
+String awayMinTempString = String(awayMinTemp); 
 
+float newHomeMaxTemp = 19.0;
+float homeMaxTemp = 19.0;
+String homeMaxString = String(homeMaxTemp); 
+
+float newAwayMaxTemp = 19.0;
+float awayMaxTemp = 19.0;
+String awayMaxTempString = String(awayMaxTemp); 
 
 //here are the possible modes the thermostat can be in: off/heat/cool
 #define MODE_OFF "Off"
@@ -215,10 +222,16 @@ char auth[] = BLYNK_AUTH_TOKEN;
 //definitions for the blynk interface
 #define BLYNK_DISPLAY_CURRENT_TEMP V0
 #define BLYNK_DISPLAY_HUMIDITY V1
-#define BLYNK_DISPLAY_TARGET_TEMP V2
-#define BLYNK_DISPLAY_TARGET_AWAY_TEMP V15
-#define BLYNK_SLIDER_TEMP V10
-#define BLYNK_SLIDER_AWAY_TEMP V14
+#define BLYNK_DISPLAY_HOME_MIN_TEMP V2
+#define BLYNK_DISPLAY_HOME_MAX_TEMP V16
+#define BLYNK_DISPLAY_AWAY_MIN_TEMP V15
+#define BLYNK_DISPLAY_AWAY_MAX_TEMP V19
+
+#define BLYNK_SLIDER_HOME_MIN_TEMP V10
+#define BLYNK_SLIDER_HOME_MAX_TEMP V17
+
+#define BLYNK_SLIDER_AWAY_MIN_TEMP V14
+#define BLYNK_SLIDER_AWAY_MAX_TEMP V20
 
 #define BLYNK_BUTTON_FAN V11
 #define BLYNK_LED_FAN V3
@@ -277,7 +290,7 @@ void setup() {
   //declare cloud variables
   //https://docs.particle.io/reference/firmware/photon/#particle-variable-
   //Currently, up to 10 cloud variables may be defined and each variable name is limited to a maximum of 12 characters
-  if (Particle.variable("homeMinTemp", atHomeMinimumString)==false) {
+  if (Particle.variable("homeMinTemp", homeMinString)==false) {
     Particle.publish(APP_NAME, "ERROR: Failed to register variable homeMinTemp", 60, PRIVATE);
   }
   if (Particle.variable("currentTemp", currentTempString)==false) {
@@ -298,8 +311,8 @@ void setup() {
   //Currently the application supports the creation of up to 4 different cloud functions.
   // If you declare a function name longer than 12 characters the function will not be registered.
   //user functions
-  if (Particle.function("setTargetTmp", setTargetTemp)==false) {
-     Particle.publish(APP_NAME, "ERROR: Failed to register function setTargetTemp", 60, PRIVATE);
+  if (Particle.function("setTargetTmp", setHomeMin)==false) {
+     Particle.publish(APP_NAME, "ERROR: Failed to register function setHomeMin", 60, PRIVATE);
   }
   //TESTING_HACK
   if (Particle.function("setCurrTmp", setCurrentTemp)==false) {
@@ -485,25 +498,25 @@ void failDebugMessage(char* p, unsigned int length){
 #define DEBOUNCE_SETTINGS_MODE 8000 //give more time to the MODE change
 
 /*******************************************************************************
- * Function Name  : setTargetTemp
+ * Function Name  : setHomeMin
  * Description    : sets the target temperature of the thermostat
-                    newAtHomeMinimumTemp has to be a valid float value, or no new target temp will be set
+                    newHomeMinTemp has to be a valid float value, or no new target temp will be set
  * Behavior       : the new setting will not take place right away, but moments after
                     since a timer is triggered. This is to debounce the setting and
                     allow the users to change their mind
 * Return         : 0 if all is good, or -1 if the parameter does not match on or off
  *******************************************************************************/
 elapsedMillis setNewTargetTempTimer;
-int setTargetTemp(String temp)
+int setHomeMin(String temp)
 {
   float tmpFloat = temp.toFloat();
   //update the target temp only in the case the conversion to float works
   // (toFloat returns 0 if there is a problem in the conversion)
   // sorry, if you wanted to set 0 as the target temp, you can't :)
   if ( tmpFloat > 0 ) {
-    //newAtHomeMinimumTemp will be copied to homeMinTemp moments after in function updateTargetTemp()
+    //newHomeMinTemp will be copied to homeMinTemp moments after in function updateTargetTemp()
     // this is to 1-debounce the blynk slider I use and 2-debounce the user changing his/her mind quickly
-    newAtHomeMinimumTemp = tmpFloat;
+    newHomeMinTemp = tmpFloat;
     //start timer to debounce this new setting
     setNewTargetTempTimer = 0;
     return 0;
@@ -529,9 +542,9 @@ int setTargetAwayTemp(String temp)
   // (toFloat returns 0 if there is a problem in the conversion)
   // sorry, if you wanted to set 0 as the target temp, you can't :)
   if ( tmpFloat > 0 ) {
-    //newAtHomeMinimumTemp will be copied to homeMinTemp moments after in function updateTargetTemp()
+    //newHomeMinTemp will be copied to homeMinTemp moments after in function updateTargetTemp()
     // this is to 1-debounce the blynk slider I use and 2-debounce the user changing his/her mind quickly
-    newTargetAwayTemp = tmpFloat;
+    newAwayMinTemp = tmpFloat;
     //start timer to debounce this new setting
     setNewTargetAwayTempTimer = 0;
     return 0;
@@ -551,7 +564,7 @@ int setTargetAwayTemp(String temp)
 /*******************************************************************************
  * Function Name  : updateTargetTemp
  * Description    : updates the value of target temperature of the thermostat
-                    moments after it was set with setTargetTemp
+                    moments after it was set with setHomeMin
  * Return         : none
  *******************************************************************************/
 void updateTargetTemp()
@@ -561,16 +574,16 @@ void updateTargetTemp()
     return;
   }
   //is there anything to update?
-  if (homeMinTemp == newAtHomeMinimumTemp) {
+  if (homeMinTemp == newHomeMinTemp) {
     return;
   }
 
-  homeMinTemp = newAtHomeMinimumTemp;
-  atHomeMinimumString = float2string(homeMinTemp);
+  homeMinTemp = newHomeMinTemp;
+  homeMinString = float2string(homeMinTemp);
 
-  //Particle.publish(APP_NAME, "New target temp: " + atHomeMinimumString, 60, PRIVATE);
-  //Particle.publish(PUSHBULLET_NOTIF_PERSONAL, "New target temp: " + atHomeMinimumString + "°C" + getTime(), 60, PRIVATE);
-  String tempStatus = "New target temp: " + atHomeMinimumString + "°C" + getTime();
+  //Particle.publish(APP_NAME, "New target temp: " + homeMinString, 60, PRIVATE);
+  //Particle.publish(PUSHBULLET_NOTIF_PERSONAL, "New target temp: " + homeMinString + "°C" + getTime(), 60, PRIVATE);
+  String tempStatus = "New target temp: " + homeMinString + "°C" + getTime();
   Particle.publish("googleDocs", "{\"my-name\":\"" + tempStatus + "\"}", 60, PRIVATE);
 }
 void updateTargetAwayTemp()
@@ -580,16 +593,16 @@ void updateTargetAwayTemp()
     return;
   }
   //is there anything to update?
-  if (targetAwayTemp == newTargetAwayTemp) {
+  if (awayMinTemp == newAwayMinTemp) {
     return;
   }
 
-  targetAwayTemp = newTargetAwayTemp;
-  targetAwayTempString = float2string(targetAwayTemp);
+  awayMinTemp = newAwayMinTemp;
+  awayMinTempString = float2string(awayMinTemp);
 
-  //Particle.publish(APP_NAME, "New target temp: " + atHomeMinimumString, 60, PRIVATE);
-  //Particle.publish(PUSHBULLET_NOTIF_PERSONAL, "New target temp: " + atHomeMinimumString + "°C" + getTime(), 60, PRIVATE);
-  String tempStatus = "New target Away temp: " + targetAwayTempString + "°C" + getTime();
+  //Particle.publish(APP_NAME, "New target temp: " + homeMinString, 60, PRIVATE);
+  //Particle.publish(PUSHBULLET_NOTIF_PERSONAL, "New target temp: " + homeMinString + "°C" + getTime(), 60, PRIVATE);
+  String tempStatus = "New target Away temp: " + awayMinTempString + "°C" + getTime();
   Particle.publish("googleDocs", "{\"my-name\":\"" + tempStatus + "\"}", 60, PRIVATE);
 }
 /*******************************************************************************
@@ -1035,8 +1048,8 @@ void heatingUpdateFunction(){
   }
 
   if ( currentTemp >= (homeMinTemp + margin) ) {
-    //Particle.publish(PUSHBULLET_NOTIF_PERSONAL, "Desired temperature reached: " + atHomeMinimumString + "°C" + getTime(), 60, PRIVATE);
-    String tempStatus = "Desired temperature reached: " + atHomeMinimumString + "°C" + getTime();
+    //Particle.publish(PUSHBULLET_NOTIF_PERSONAL, "Desired temperature reached: " + homeMinString + "°C" + getTime(), 60, PRIVATE);
+    String tempStatus = "Desired temperature reached: " + homeMinString + "°C" + getTime();
     Particle.publish("googleDocs", "{\"my-name\":\"" + tempStatus + "\"}", 60, PRIVATE);
     thermostatStateMachine.transitionTo(idleState);
   }
@@ -1148,8 +1161,8 @@ void coolingUpdateFunction(){
   }
 
   if ( currentTemp <= (homeMinTemp - margin) ) {
-    //Particle.publish(PUSHBULLET_NOTIF_PERSONAL, "Desired temperature reached: " + atHomeMinimumString + "°C" + getTime(), 60, PRIVATE);
-    String tempStatus = "Desired temperature reached: " + atHomeMinimumString + "°C" + getTime();
+    //Particle.publish(PUSHBULLET_NOTIF_PERSONAL, "Desired temperature reached: " + homeMinString + "°C" + getTime(), 60, PRIVATE);
+    String tempStatus = "Desired temperature reached: " + homeMinString + "°C" + getTime();
     Particle.publish("googleDocs", "{\"my-name\":\"" + tempStatus + "\"}", 60, PRIVATE);
     thermostatStateMachine.transitionTo(idleState);
   }
@@ -1314,15 +1327,15 @@ BLYNK_READ(BLYNK_DISPLAY_HUMIDITY) {
   // source: http://docs.blynk.cc/#widgets-displays-value-display
   Blynk.virtualWrite(BLYNK_DISPLAY_HUMIDITY, currentHumidity);
 }
-BLYNK_READ(BLYNK_DISPLAY_TARGET_TEMP) {
+BLYNK_READ(BLYNK_DISPLAY_HOME_MIN_TEMP) {
   //this is a blynk value display
   // source: http://docs.blynk.cc/#widgets-displays-value-display
-  Blynk.virtualWrite(BLYNK_DISPLAY_TARGET_TEMP, homeMinTemp);
+  Blynk.virtualWrite(BLYNK_DISPLAY_HOME_MIN_TEMP, homeMinTemp);
 }
-BLYNK_READ(BLYNK_DISPLAY_TARGET_AWAY_TEMP) {
+BLYNK_READ(BLYNK_DISPLAY_AWAY_MIN_TEMP) {
   //this is a blynk value display
   // source: http://docs.blynk.cc/#widgets-displays-value-display
-  Blynk.virtualWrite(BLYNK_DISPLAY_TARGET_AWAY_TEMP, targetAwayTemp);
+  Blynk.virtualWrite(BLYNK_DISPLAY_AWAY_MIN_TEMP, awayMinTemp);
 }
 BLYNK_READ(BLYNK_LED_FAN) {
   //this is a blynk led
@@ -1376,7 +1389,7 @@ BLYNK_READ(BLYNK_DISPLAY_STATE) {
 BLYNK_WRITE(BLYNK_SLIDER_TEMP) {
   //this is the blynk slider
   // source: http://docs.blynk.cc/#widgets-controllers-slider
-  setTargetTemp(param.asStr());
+  setHomeMin(param.asStr());
   flagSettingsHaveChanged();
 }
 BLYNK_WRITE(BLYNK_SLIDER_AWAY_TEMP) {
@@ -1493,7 +1506,7 @@ void BLYNK_setCoolLed(int status) {
 // BLYNK_CONNECTED() {
 //   Blynk.syncVirtual(BLYNK_DISPLAY_CURRENT_TEMP);
 //   Blynk.syncVirtual(BLYNK_DISPLAY_HUMIDITY);
-//   Blynk.syncVirtual(BLYNK_DISPLAY_TARGET_TEMP);
+//   Blynk.syncVirtual(BLYNK_DISPLAY_HOME_MIN_TEMP);
 //   Blynk.syncVirtual(BLYNK_LED_FAN);
 //   Blynk.syncVirtual(BLYNK_LED_HEAT);
 //   Blynk.syncVirtual(BLYNK_LED_COOL);
@@ -1529,8 +1542,8 @@ void updateBlynkCloud() {
       Blynk.virtualWrite(BLYNK_DISPLAY_HUMIDITY, currentHumidity);
     }
 
-    Blynk.virtualWrite(BLYNK_DISPLAY_TARGET_TEMP, homeMinTemp);
-    Blynk.virtualWrite(BLYNK_DISPLAY_TARGET_AWAY_TEMP, targetAwayTemp);
+    Blynk.virtualWrite(BLYNK_DISPLAY_HOME_MIN_TEMP, homeMinTemp);
+    Blynk.virtualWrite(BLYNK_DISPLAY_AWAY_MIN_TEMP, awayMinTemp);
 
     if ( externalPulse ) {
       pulseLed.on();
@@ -1606,16 +1619,16 @@ void readFromEeprom()
   if ( myObj.version == EEPROM_VERSION ) {
 
     homeMinTemp = float( myObj.homeMinTemp );
-    newAtHomeMinimumTemp = homeMinTemp;
-    atHomeMinimumString = float2string(homeMinTemp);
+    newHomeMinTemp = homeMinTemp;
+    homeMinString = float2string(homeMinTemp);
 
-    targetAwayTemp = float( myObj.targetAwaySummerTemp );
-    newTargetAwayTemp = targetAwayTemp;
-    targetAwayTempString = float2string(targetAwayTemp);
+    awayMinTemp = float( myObj.targetAwaySummerTemp );
+    newAwayMinTemp = awayMinTemp;
+    awayMinTempString = float2string(awayMinTemp);
 
     // homeMinTemp = float( myObj.homeMinTemp );
-    // newAtHomeMinimumTemp = homeMinTemp;
-    // atHomeMinimumString = float2string(homeMinTemp);
+    // newHomeMinTemp = homeMinTemp;
+    // homeMinString = float2string(homeMinTemp);
 
     internalMode = convertIntToMode( myObj.internalMode );
     externalMode = internalMode;
@@ -1665,8 +1678,8 @@ void saveSettings() {
   //store thresholds in the struct type that will be saved in the eeprom
   eepromMemory.version = EEPROM_VERSION;
   eepromMemory.homeMinTemp = uint8_t(homeMinTemp);
-  eepromMemory.targetAwayWinterTemp = uint8_t(targetAwayTemp);
-  eepromMemory.targetAwaySummerTemp = uint8_t(targetAwayTemp);
+  eepromMemory.targetAwayWinterTemp = uint8_t(awayMinTemp);
+  eepromMemory.targetAwaySummerTemp = uint8_t(awayMinTemp);
   eepromMemory.internalMode = convertModeToInt(internalMode);
 
   eepromMemory.internalFan = 0;
