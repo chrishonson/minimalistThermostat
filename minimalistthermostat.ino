@@ -373,8 +373,8 @@ void loop() {
     Blynk.run();
   }
  
-  updateTargetTemp();
-  updateTargetAwayTemp();
+  updateHomeMinTemp();
+  updateAwayMinTemp();
   updateFanStatus();
   updatePulseStatus();
   updateMode();
@@ -506,7 +506,7 @@ void failDebugMessage(char* p, unsigned int length){
                     allow the users to change their mind
 * Return         : 0 if all is good, or -1 if the parameter does not match on or off
  *******************************************************************************/
-elapsedMillis setNewTargetTempTimer;
+elapsedMillis setHomeMinTimer;
 int setHomeMin(String temp)
 {
   float tmpFloat = temp.toFloat();
@@ -514,11 +514,11 @@ int setHomeMin(String temp)
   // (toFloat returns 0 if there is a problem in the conversion)
   // sorry, if you wanted to set 0 as the target temp, you can't :)
   if ( tmpFloat > 0 ) {
-    //newHomeMinTemp will be copied to homeMinTemp moments after in function updateTargetTemp()
+    //newHomeMinTemp will be copied to homeMinTemp moments after in function updateHomeMinTemp()
     // this is to 1-debounce the blynk slider I use and 2-debounce the user changing his/her mind quickly
     newHomeMinTemp = tmpFloat;
     //start timer to debounce this new setting
-    setNewTargetTempTimer = 0;
+    setHomeMinTimer = 0;
     return 0;
   }
 
@@ -534,43 +534,45 @@ int setHomeMin(String temp)
   return -1;
 }
 
-elapsedMillis setNewTargetAwayTempTimer;
-int setTargetAwayTemp(String temp)
+elapsedMillis setHomeMaxTimer;
+int setHomeMax(String temp)
 {
   float tmpFloat = temp.toFloat();
-  //update the target temp only in the case the conversion to float works
-  // (toFloat returns 0 if there is a problem in the conversion)
-  // sorry, if you wanted to set 0 as the target temp, you can't :)
   if ( tmpFloat > 0 ) {
-    //newHomeMinTemp will be copied to homeMinTemp moments after in function updateTargetTemp()
-    // this is to 1-debounce the blynk slider I use and 2-debounce the user changing his/her mind quickly
-    newAwayMinTemp = tmpFloat;
-    //start timer to debounce this new setting
-    setNewTargetAwayTempTimer = 0;
+    newHomeMaxTemp = tmpFloat;
+    setHomeMaxTimer = 0;
     return 0;
   }
-
-  //show only 2 decimals in notifications
-  // Example: show 19.00 instead of 19.000000
-  temp = temp.substring(0, temp.length()-4);
-
-  //if the execution reaches here then the value was invalid
-  //Particle.publish(APP_NAME, "ERROR: Failed to set new target temp to " + temp, 60, PRIVATE);
-//  Particle.publish(PUSHBULLET_NOTIF_PERSONAL, "ERROR: Failed to set new target temp to " + temp + getTime(), 60, PRIVATE);
-  String tempStatus = "ERROR: Failed to set new away target temp to " + temp + getTime();
-  Particle.publish("googleDocs", "{\"my-name\":\"" + tempStatus + "\"}", 60, PRIVATE);
-  return -1;
+}
+elapsedMillis setAwayMinTimer;
+int setAwayMin(String temp)
+{
+  float tmpFloat = temp.toFloat();
+  if ( tmpFloat > 0 ) {
+    newAwayMinTemp = tmpFloat;
+    setAwayMinTimer = 0;
+    return 0;
+  }
+}
+elapsedMillis setAwayMaxTimer;
+int setAwayMax(String temp)
+{
+  float tmpFloat = temp.toFloat();
+  if ( tmpFloat > 0 ) {
+    newAwayMaxTemp = tmpFloat;
+    setAwayMaxTimer = 0;
+    return 0;
+  }
 }
 /*******************************************************************************
- * Function Name  : updateTargetTemp
- * Description    : updates the value of target temperature of the thermostat
-                    moments after it was set with setHomeMin
+ * Function Name  : updateHomeMinTemp
+ * Description    : debounces setHomeMin
  * Return         : none
  *******************************************************************************/
-void updateTargetTemp()
+void updateHomeMinTemp()
 {
   //debounce the new setting
-  if (setNewTargetTempTimer < DEBOUNCE_SETTINGS) {
+  if (setHomeMinTimer < DEBOUNCE_SETTINGS) {
     return;
   }
   //is there anything to update?
@@ -581,15 +583,13 @@ void updateTargetTemp()
   homeMinTemp = newHomeMinTemp;
   homeMinString = float2string(homeMinTemp);
 
-  //Particle.publish(APP_NAME, "New target temp: " + homeMinString, 60, PRIVATE);
-  //Particle.publish(PUSHBULLET_NOTIF_PERSONAL, "New target temp: " + homeMinString + "°C" + getTime(), 60, PRIVATE);
-  String tempStatus = "New target temp: " + homeMinString + "°C" + getTime();
+  String tempStatus = "New home min: " + homeMinString + "°C" + getTime();
   Particle.publish("googleDocs", "{\"my-name\":\"" + tempStatus + "\"}", 60, PRIVATE);
 }
-void updateTargetAwayTemp()
+void updateAwayMinTemp()
 {
   //debounce the new setting
-  if (setNewTargetAwayTempTimer < DEBOUNCE_SETTINGS) {
+  if (setAwayMinTimer < DEBOUNCE_SETTINGS) {
     return;
   }
   //is there anything to update?
@@ -600,9 +600,7 @@ void updateTargetAwayTemp()
   awayMinTemp = newAwayMinTemp;
   awayMinTempString = float2string(awayMinTemp);
 
-  //Particle.publish(APP_NAME, "New target temp: " + homeMinString, 60, PRIVATE);
-  //Particle.publish(PUSHBULLET_NOTIF_PERSONAL, "New target temp: " + homeMinString + "°C" + getTime(), 60, PRIVATE);
-  String tempStatus = "New target Away temp: " + awayMinTempString + "°C" + getTime();
+  String tempStatus = "New Away Min temp: " + awayMinTempString + "°C" + getTime();
   Particle.publish("googleDocs", "{\"my-name\":\"" + tempStatus + "\"}", 60, PRIVATE);
 }
 /*******************************************************************************
@@ -1395,7 +1393,7 @@ BLYNK_WRITE(BLYNK_SLIDER_TEMP) {
 BLYNK_WRITE(BLYNK_SLIDER_AWAY_TEMP) {
   //this is the blynk slider
   // source: http://docs.blynk.cc/#widgets-controllers-slider
-  setTargetAwayTemp(param.asStr());
+  setAwayMin(param.asStr());
   flagSettingsHaveChanged();
 }
 BLYNK_WRITE(BLYNK_BUTTON_FAN) {
