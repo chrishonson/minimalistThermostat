@@ -80,7 +80,7 @@ String VERSION = "Version 0.25";
            * PUSHBULLET_NOTIF renamed to PUSHBULLET_NOTIF_PERSONAL
            * removed yyyy-mm-dd from notifications and left only hh:mm:ss
            * minor changes in temp/humidity reported with Particle.publish()
-           * reporting targetTemp when desired temp is reached
+           * reporting homeMinTemp when desired temp is reached
  * changes in version 0.18:
            * created a pulse of heating for warming up the house a bit
            * created a function that sets the fan on and contains this code below in function myDigitalWrite()
@@ -106,7 +106,7 @@ String VERSION = "Version 0.25";
              this saves eeprom pages to be written more often than needed
              (for instance a float takes 4 bytes and an uint8_t takes only 1)
  * changes in version 0.22:
-           * fixed an issue with targetTempString, when rebooting the photon would not show the
+           * fixed an issue with atHomeMinimumString, when rebooting the photon would not show the
              temperature loaded from the eeprom
  * changes in version 0.23:
            * Swapped pushbullet notifications with google sheets on thermostat activity
@@ -164,13 +164,12 @@ int coolOutput;
 //temperature related variables - internal
 float currentTemp = 20.0;
 float currentHumidity = 0.0;
-
 String currentTempString = String(currentTemp); //String to store the sensor's temp so it can be exposed
 String currentHumidityString = String(currentHumidity); //String to store the sensor's humidity so it can be exposed
-float newTargetTemp = 19.0;
-float targetTemp = 19.0;
-String targetTempString = String(targetTemp); //String to store the target temp so it can be exposed and set
 
+float newAtHomeMinimumTemp = 19.0;
+float homeMinTemp = 19.0;
+String atHomeMinimumString = String(homeMinTemp); //String to store the target temp so it can be exposed and set
 
 float newTargetAwayTemp = 19.0;
 float targetAwayTemp = 19.0;
@@ -278,8 +277,8 @@ void setup() {
   //declare cloud variables
   //https://docs.particle.io/reference/firmware/photon/#particle-variable-
   //Currently, up to 10 cloud variables may be defined and each variable name is limited to a maximum of 12 characters
-  if (Particle.variable("targetTemp", targetTempString)==false) {
-    Particle.publish(APP_NAME, "ERROR: Failed to register variable targetTemp", 60, PRIVATE);
+  if (Particle.variable("homeMinTemp", atHomeMinimumString)==false) {
+    Particle.publish(APP_NAME, "ERROR: Failed to register variable homeMinTemp", 60, PRIVATE);
   }
   if (Particle.variable("currentTemp", currentTempString)==false) {
     Particle.publish(APP_NAME, "ERROR: Failed to register variable currentTemp", 60, PRIVATE);
@@ -488,7 +487,7 @@ void failDebugMessage(char* p, unsigned int length){
 /*******************************************************************************
  * Function Name  : setTargetTemp
  * Description    : sets the target temperature of the thermostat
-                    newTargetTemp has to be a valid float value, or no new target temp will be set
+                    newAtHomeMinimumTemp has to be a valid float value, or no new target temp will be set
  * Behavior       : the new setting will not take place right away, but moments after
                     since a timer is triggered. This is to debounce the setting and
                     allow the users to change their mind
@@ -502,9 +501,9 @@ int setTargetTemp(String temp)
   // (toFloat returns 0 if there is a problem in the conversion)
   // sorry, if you wanted to set 0 as the target temp, you can't :)
   if ( tmpFloat > 0 ) {
-    //newTargetTemp will be copied to targetTemp moments after in function updateTargetTemp()
+    //newAtHomeMinimumTemp will be copied to homeMinTemp moments after in function updateTargetTemp()
     // this is to 1-debounce the blynk slider I use and 2-debounce the user changing his/her mind quickly
-    newTargetTemp = tmpFloat;
+    newAtHomeMinimumTemp = tmpFloat;
     //start timer to debounce this new setting
     setNewTargetTempTimer = 0;
     return 0;
@@ -530,7 +529,7 @@ int setTargetAwayTemp(String temp)
   // (toFloat returns 0 if there is a problem in the conversion)
   // sorry, if you wanted to set 0 as the target temp, you can't :)
   if ( tmpFloat > 0 ) {
-    //newTargetTemp will be copied to targetTemp moments after in function updateTargetTemp()
+    //newAtHomeMinimumTemp will be copied to homeMinTemp moments after in function updateTargetTemp()
     // this is to 1-debounce the blynk slider I use and 2-debounce the user changing his/her mind quickly
     newTargetAwayTemp = tmpFloat;
     //start timer to debounce this new setting
@@ -562,16 +561,16 @@ void updateTargetTemp()
     return;
   }
   //is there anything to update?
-  if (targetTemp == newTargetTemp) {
+  if (homeMinTemp == newAtHomeMinimumTemp) {
     return;
   }
 
-  targetTemp = newTargetTemp;
-  targetTempString = float2string(targetTemp);
+  homeMinTemp = newAtHomeMinimumTemp;
+  atHomeMinimumString = float2string(homeMinTemp);
 
-  //Particle.publish(APP_NAME, "New target temp: " + targetTempString, 60, PRIVATE);
-  //Particle.publish(PUSHBULLET_NOTIF_PERSONAL, "New target temp: " + targetTempString + "°C" + getTime(), 60, PRIVATE);
-  String tempStatus = "New target temp: " + targetTempString + "°C" + getTime();
+  //Particle.publish(APP_NAME, "New target temp: " + atHomeMinimumString, 60, PRIVATE);
+  //Particle.publish(PUSHBULLET_NOTIF_PERSONAL, "New target temp: " + atHomeMinimumString + "°C" + getTime(), 60, PRIVATE);
+  String tempStatus = "New target temp: " + atHomeMinimumString + "°C" + getTime();
   Particle.publish("googleDocs", "{\"my-name\":\"" + tempStatus + "\"}", 60, PRIVATE);
 }
 void updateTargetAwayTemp()
@@ -588,8 +587,8 @@ void updateTargetAwayTemp()
   targetAwayTemp = newTargetAwayTemp;
   targetAwayTempString = float2string(targetAwayTemp);
 
-  //Particle.publish(APP_NAME, "New target temp: " + targetTempString, 60, PRIVATE);
-  //Particle.publish(PUSHBULLET_NOTIF_PERSONAL, "New target temp: " + targetTempString + "°C" + getTime(), 60, PRIVATE);
+  //Particle.publish(APP_NAME, "New target temp: " + atHomeMinimumString, 60, PRIVATE);
+  //Particle.publish(PUSHBULLET_NOTIF_PERSONAL, "New target temp: " + atHomeMinimumString + "°C" + getTime(), 60, PRIVATE);
   String tempStatus = "New target Away temp: " + targetAwayTempString + "°C" + getTime();
   Particle.publish("googleDocs", "{\"my-name\":\"" + tempStatus + "\"}", 60, PRIVATE);
 }
@@ -987,7 +986,7 @@ void idleUpdateFunction(){
   //are we heating?
   if ( internalMode == MODE_HEAT ){
     //if the temperature is lower than the target, transition to heatingState
-    if ( currentTemp <= (targetTemp - margin) ) {
+    if ( currentTemp <= (homeMinTemp - margin) ) {
       thermostatStateMachine.transitionTo(heatingState);
     }
     if ( internalPulse ) {
@@ -998,7 +997,7 @@ void idleUpdateFunction(){
   //are we cooling?
   if ( internalMode == MODE_COOL ){
     //if the temperature is higher than the target, transition to coolingState
-    if ( currentTemp > (targetTemp + margin) ) {
+    if ( currentTemp > (homeMinTemp + margin) ) {
       thermostatStateMachine.transitionTo(coolingState);
     }
     if ( internalPulse ) {
@@ -1035,9 +1034,9 @@ void heatingUpdateFunction(){
     return;
   }
 
-  if ( currentTemp >= (targetTemp + margin) ) {
-    //Particle.publish(PUSHBULLET_NOTIF_PERSONAL, "Desired temperature reached: " + targetTempString + "°C" + getTime(), 60, PRIVATE);
-    String tempStatus = "Desired temperature reached: " + targetTempString + "°C" + getTime();
+  if ( currentTemp >= (homeMinTemp + margin) ) {
+    //Particle.publish(PUSHBULLET_NOTIF_PERSONAL, "Desired temperature reached: " + atHomeMinimumString + "°C" + getTime(), 60, PRIVATE);
+    String tempStatus = "Desired temperature reached: " + atHomeMinimumString + "°C" + getTime();
     Particle.publish("googleDocs", "{\"my-name\":\"" + tempStatus + "\"}", 60, PRIVATE);
     thermostatStateMachine.transitionTo(idleState);
   }
@@ -1148,9 +1147,9 @@ void coolingUpdateFunction(){
     return;
   }
 
-  if ( currentTemp <= (targetTemp - margin) ) {
-    //Particle.publish(PUSHBULLET_NOTIF_PERSONAL, "Desired temperature reached: " + targetTempString + "°C" + getTime(), 60, PRIVATE);
-    String tempStatus = "Desired temperature reached: " + targetTempString + "°C" + getTime();
+  if ( currentTemp <= (homeMinTemp - margin) ) {
+    //Particle.publish(PUSHBULLET_NOTIF_PERSONAL, "Desired temperature reached: " + atHomeMinimumString + "°C" + getTime(), 60, PRIVATE);
+    String tempStatus = "Desired temperature reached: " + atHomeMinimumString + "°C" + getTime();
     Particle.publish("googleDocs", "{\"my-name\":\"" + tempStatus + "\"}", 60, PRIVATE);
     thermostatStateMachine.transitionTo(idleState);
   }
@@ -1318,7 +1317,7 @@ BLYNK_READ(BLYNK_DISPLAY_HUMIDITY) {
 BLYNK_READ(BLYNK_DISPLAY_TARGET_TEMP) {
   //this is a blynk value display
   // source: http://docs.blynk.cc/#widgets-displays-value-display
-  Blynk.virtualWrite(BLYNK_DISPLAY_TARGET_TEMP, targetTemp);
+  Blynk.virtualWrite(BLYNK_DISPLAY_TARGET_TEMP, homeMinTemp);
 }
 BLYNK_READ(BLYNK_DISPLAY_TARGET_AWAY_TEMP) {
   //this is a blynk value display
@@ -1530,7 +1529,7 @@ void updateBlynkCloud() {
       Blynk.virtualWrite(BLYNK_DISPLAY_HUMIDITY, currentHumidity);
     }
 
-    Blynk.virtualWrite(BLYNK_DISPLAY_TARGET_TEMP, targetTemp);
+    Blynk.virtualWrite(BLYNK_DISPLAY_TARGET_TEMP, homeMinTemp);
     Blynk.virtualWrite(BLYNK_DISPLAY_TARGET_AWAY_TEMP, targetAwayTemp);
 
     if ( externalPulse ) {
@@ -1584,7 +1583,7 @@ void flagSettingsHaveChanged()
 #define EEPROM_ADDRESS 0
 struct EepromMemoryStructure {
   uint8_t version = EEPROM_VERSION;
-  uint8_t targetTemp;
+  uint8_t homeMinTemp;
   uint8_t targetAwaySummerTemp;
   uint8_t targetAwayWinterTemp;
   uint8_t internalFan;
@@ -1606,17 +1605,17 @@ void readFromEeprom()
   // data just read with the previous EEPROM.get() is invalid and we will ignore it
   if ( myObj.version == EEPROM_VERSION ) {
 
-    targetTemp = float( myObj.targetTemp );
-    newTargetTemp = targetTemp;
-    targetTempString = float2string(targetTemp);
+    homeMinTemp = float( myObj.homeMinTemp );
+    newAtHomeMinimumTemp = homeMinTemp;
+    atHomeMinimumString = float2string(homeMinTemp);
 
     targetAwayTemp = float( myObj.targetAwaySummerTemp );
     newTargetAwayTemp = targetAwayTemp;
     targetAwayTempString = float2string(targetAwayTemp);
 
-    // targetTemp = float( myObj.targetTemp );
-    // newTargetTemp = targetTemp;
-    // targetTempString = float2string(targetTemp);
+    // homeMinTemp = float( myObj.homeMinTemp );
+    // newAtHomeMinimumTemp = homeMinTemp;
+    // atHomeMinimumString = float2string(homeMinTemp);
 
     internalMode = convertIntToMode( myObj.internalMode );
     externalMode = internalMode;
@@ -1627,8 +1626,8 @@ void readFromEeprom()
       externalFan = true;
     }
 
-    // Particle.publish(APP_NAME, "DEBUG: read settings from EEPROM: " + String(myObj.targetTemp)
-    Particle.publish(APP_NAME, "read:" + internalMode + "-" + String(internalFan) + "-" + String(targetTemp), 60, PRIVATE);
+    // Particle.publish(APP_NAME, "DEBUG: read settings from EEPROM: " + String(myObj.homeMinTemp)
+    Particle.publish(APP_NAME, "read:" + internalMode + "-" + String(internalFan) + "-" + String(homeMinTemp), 60, PRIVATE);
 
   }
 
@@ -1665,7 +1664,7 @@ void saveSettings() {
 
   //store thresholds in the struct type that will be saved in the eeprom
   eepromMemory.version = EEPROM_VERSION;
-  eepromMemory.targetTemp = uint8_t(targetTemp);
+  eepromMemory.homeMinTemp = uint8_t(homeMinTemp);
   eepromMemory.targetAwayWinterTemp = uint8_t(targetAwayTemp);
   eepromMemory.targetAwaySummerTemp = uint8_t(targetAwayTemp);
   eepromMemory.internalMode = convertModeToInt(internalMode);
@@ -1678,8 +1677,8 @@ void saveSettings() {
   //then save
   EEPROM.put(EEPROM_ADDRESS, eepromMemory);
 
-  // Particle.publish(APP_NAME, "stored:" + eepromMemory.internalMode + "-" + String(eepromMemory.internalFan) + "-" + String(eepromMemory.targetTemp) , 60, PRIVATE);
-  Particle.publish(APP_NAME, "stored:" + internalMode + "-" + String(internalFan) + "-" + String(targetTemp), 60, PRIVATE);
+  // Particle.publish(APP_NAME, "stored:" + eepromMemory.internalMode + "-" + String(eepromMemory.internalFan) + "-" + String(eepromMemory.homeMinTemp) , 60, PRIVATE);
+  Particle.publish(APP_NAME, "stored:" + internalMode + "-" + String(internalFan) + "-" + String(homeMinTemp), 60, PRIVATE);
 
 }
 
