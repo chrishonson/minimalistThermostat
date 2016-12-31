@@ -243,6 +243,7 @@ char auth[] = BLYNK_AUTH_TOKEN;
 #define BLYNK_LED_PULSE V6
 #define BLYNK_BUTTON_PULSE V12
 #define BLYNK_DISPLAY_STATE V13
+#define BLYNK_DISPLAY_USER_POSITION V18
 
 //this is the remote temperature sensor
 #define BLYNK_DISPLAY_CURRENT_TEMP_UPSTAIRS V9
@@ -1352,6 +1353,14 @@ String getTime() {
   return " " + timeNow;
 }
 
+void blynkUpdateUserPosition(){
+  String position = AWAY;
+  if(isUsersHome()){
+    position = HOME;
+  }
+  Blynk.virtualWrite(BLYNK_DISPLAY_USER_POSITION, position);
+}
+
 /*******************************************************************************
  * Function Name  : setState
  * Description    : sets the state of the system
@@ -1448,7 +1457,9 @@ BLYNK_READ(BLYNK_DISPLAY_MODE) {
 BLYNK_READ(BLYNK_DISPLAY_STATE) {
   Blynk.virtualWrite(BLYNK_DISPLAY_STATE, state);
 }
-
+BLYNK_READ(BLYNK_DISPLAY_USER_POSITION) {
+ blynkUpdateUserPosition();
+}
 /*******************************************************************************
  * Function Name  : BLYNK_WRITE
  * Description    : these functions are called by blynk when the blynk app wants
@@ -1643,6 +1654,7 @@ void updateBlynkCloud() {
     Blynk.virtualWrite(BLYNK_DISPLAY_MODE, externalMode);
     Blynk.virtualWrite(BLYNK_DISPLAY_STATE, state);
 
+    blynkUpdateUserPosition();
   }
 
 }
