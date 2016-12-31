@@ -106,7 +106,7 @@ String VERSION = "Version 0.25";
              this saves eeprom pages to be written more often than needed
              (for instance a float takes 4 bytes and an uint8_t takes only 1)
  * changes in version 0.22:
-           * fixed an issue with homeMinString, when rebooting the photon would not show the
+           * fixed an issue with homeMinTempString, when rebooting the photon would not show the
              temperature loaded from the eeprom
  * changes in version 0.23:
            * Swapped pushbullet notifications with google sheets on thermostat activity
@@ -169,7 +169,7 @@ String currentHumidityString = String(currentHumidity); //String to store the se
 
 float newHomeMinTemp = 19.0;
 float homeMinTemp = 19.0;
-String homeMinString = String(homeMinTemp); 
+String homeMinTempString = String(homeMinTemp); 
 
 float newAwayMinTemp = 19.0;
 float awayMinTemp = 19.0;
@@ -177,7 +177,7 @@ String awayMinTempString = String(awayMinTemp);
 
 float newHomeMaxTemp = 19.0;
 float homeMaxTemp = 19.0;
-String homeMaxString = String(homeMaxTemp); 
+String homeMaxTempString = String(homeMaxTemp); 
 
 float newAwayMaxTemp = 19.0;
 float awayMaxTemp = 19.0;
@@ -290,7 +290,7 @@ void setup() {
   //declare cloud variables
   //https://docs.particle.io/reference/firmware/photon/#particle-variable-
   //Currently, up to 10 cloud variables may be defined and each variable name is limited to a maximum of 12 characters
-  if (Particle.variable("homeMinTemp", homeMinString)==false) {
+  if (Particle.variable("homeMinTemp", homeMinTempString)==false) {
     Particle.publish(APP_NAME, "ERROR: Failed to register variable homeMinTemp", 60, PRIVATE);
   }
   if (Particle.variable("currentTemp", currentTempString)==false) {
@@ -375,6 +375,9 @@ void loop() {
  
   updateHomeMinTemp();
   updateAwayMinTemp();
+  updateHomeMaxTemp();
+  updateAwayMaxTemp();
+
   updateFanStatus();
   updatePulseStatus();
   updateMode();
@@ -581,26 +584,48 @@ void updateHomeMinTemp()
   }
 
   homeMinTemp = newHomeMinTemp;
-  homeMinString = float2string(homeMinTemp);
+  homeMinTempString = float2string(homeMinTemp);
 
-  String tempStatus = "New home min: " + homeMinString + "°C" + getTime();
+  String tempStatus = "New home min: " + homeMinTempString + "°C" + getTime();
   Particle.publish("googleDocs", "{\"my-name\":\"" + tempStatus + "\"}", 60, PRIVATE);
 }
 void updateAwayMinTemp()
 {
-  //debounce the new setting
   if (setAwayMinTimer < DEBOUNCE_SETTINGS) {
     return;
   }
-  //is there anything to update?
   if (awayMinTemp == newAwayMinTemp) {
     return;
   }
-
   awayMinTemp = newAwayMinTemp;
   awayMinTempString = float2string(awayMinTemp);
-
   String tempStatus = "New Away Min temp: " + awayMinTempString + "°C" + getTime();
+  Particle.publish("googleDocs", "{\"my-name\":\"" + tempStatus + "\"}", 60, PRIVATE);
+}
+void updateHomeMaxTemp()
+{
+  if (setHomeMaxTimer < DEBOUNCE_SETTINGS) {
+    return;
+  }
+  if (homeMaxTemp == newHomeMaxTemp) {
+    return;
+  }
+  homeMaxTemp = newHomeMaxTemp;
+  homeMaxTempString = float2string(homeMaxTemp);
+  String tempStatus = "New Home Max temp: " + homeMaxTempString + "°C" + getTime();
+  Particle.publish("googleDocs", "{\"my-name\":\"" + tempStatus + "\"}", 60, PRIVATE);
+}
+void updateAwayMaxTemp()
+{
+  if (setAwayMaxTimer < DEBOUNCE_SETTINGS) {
+    return;
+  }
+  if (awayMaxTemp == newAwayMaxTemp) {
+    return;
+  }
+  awayMaxTemp = newAwayMaxTemp;
+  awayMaxTempString = float2string(awayMaxTemp);
+  String tempStatus = "New Away Max temp: " + awayMaxTempString + "°C" + getTime();
   Particle.publish("googleDocs", "{\"my-name\":\"" + tempStatus + "\"}", 60, PRIVATE);
 }
 /*******************************************************************************
@@ -962,7 +987,27 @@ void idleEnterFunction(){
   //start the minimum timer of this cycle
   minimumIdleTimer = 0;
 }
-
+bool isUsersHome(){
+  if(user1LocationStatus.equalsIgnoreCase(AWAY) && user2LocationStatus.equalsIgnoreCase(AWAY)) {
+    return false;
+  }else{
+    return true;
+  }
+}
+float getTargetMin(){
+  if(isUsersHome()){
+    return awayMinTemp;
+  }else{
+    return homeMinTemp;
+  }
+}
+float getTargetMax(){
+  if(isUsersHome()){
+    return awayMaxTemp;
+  }else{
+    return homeMaxTemp;
+  }
+}
 //you can change this to your liking
 // a smaller value will make your temperature more constant at the price of
 //  starting the heat more times
@@ -997,7 +1042,7 @@ void idleUpdateFunction(){
   //are we heating?
   if ( internalMode == MODE_HEAT ){
     //if the temperature is lower than the target, transition to heatingState
-    if ( currentTemp <= (homeMinTemp - margin) ) {
+    if ( currentTemp <= (getTargetMin() - margin) ) {
       thermostatStateMachine.transitionTo(heatingState);
     }
     if ( internalPulse ) {
@@ -1008,7 +1053,7 @@ void idleUpdateFunction(){
   //are we cooling?
   if ( internalMode == MODE_COOL ){
     //if the temperature is higher than the target, transition to coolingState
-    if ( currentTemp > (homeMinTemp + margin) ) {
+    if ( currentTemp > (getTargetMax() + margin) ) {
       thermostatStateMachine.transitionTo(coolingState);
     }
     if ( internalPulse ) {
@@ -1038,6 +1083,21 @@ void heatingEnterFunction(){
   minimumOnTimer = 0;
 }
 
+String getTargetMinTempString(){
+  if(isUsersHome()){
+    return homeMinTempString;
+  }else{
+    return awayMinTempString;
+  }
+}
+String getTargetMaxTempString(){
+  if(isUsersHome()){
+    return homeMaxTempString;
+  }else{
+    return awayMaxTempString;
+  }
+}
+
 void heatingUpdateFunction(){
   //is minimum time up?
   if (minimumOnTimer < MINIMUM_ON_TIMEOUT) {
@@ -1045,9 +1105,9 @@ void heatingUpdateFunction(){
     return;
   }
 
-  if ( currentTemp >= (homeMinTemp + margin) ) {
-    //Particle.publish(PUSHBULLET_NOTIF_PERSONAL, "Desired temperature reached: " + homeMinString + "°C" + getTime(), 60, PRIVATE);
-    String tempStatus = "Desired temperature reached: " + homeMinString + "°C" + getTime();
+  if ( currentTemp >= (getTargetMin() + margin) ) {
+    //Particle.publish(PUSHBULLET_NOTIF_PERSONAL, "Desired temperature reached: " + homeMinTempString + "°C" + getTime(), 60, PRIVATE);
+    String tempStatus = "Desired temperature reached: " + getTargetMinTempString() + "°C" + getTime();
     Particle.publish("googleDocs", "{\"my-name\":\"" + tempStatus + "\"}", 60, PRIVATE);
     thermostatStateMachine.transitionTo(idleState);
   }
@@ -1059,7 +1119,6 @@ void heatingUpdateFunction(){
 
 }
 void heatingExitFunction(){
-  //Particle.publish(PUSHBULLET_NOTIF_PERSONAL, "Heat off" + getTime(), 60, PRIVATE);
   String tempStatus = "Heat off" + getTime();
   Particle.publish("googleDocs", "{\"my-name\":\"" + tempStatus + "\"}", 60, PRIVATE);
   myDigitalWrite(fan, LOW);
@@ -1158,9 +1217,9 @@ void coolingUpdateFunction(){
     return;
   }
 
-  if ( currentTemp <= (homeMinTemp - margin) ) {
-    //Particle.publish(PUSHBULLET_NOTIF_PERSONAL, "Desired temperature reached: " + homeMinString + "°C" + getTime(), 60, PRIVATE);
-    String tempStatus = "Desired temperature reached: " + homeMinString + "°C" + getTime();
+  if ( currentTemp <= (getTargetMax() - margin) ) {
+    //Particle.publish(PUSHBULLET_NOTIF_PERSONAL, "Desired temperature reached: " + homeMinTempString + "°C" + getTime(), 60, PRIVATE);
+    String tempStatus = "Desired max reached: " + getTargetMaxTempString() + "°C" + getTime();
     Particle.publish("googleDocs", "{\"my-name\":\"" + tempStatus + "\"}", 60, PRIVATE);
     thermostatStateMachine.transitionTo(idleState);
   }
@@ -1325,6 +1384,7 @@ BLYNK_READ(BLYNK_DISPLAY_HUMIDITY) {
   // source: http://docs.blynk.cc/#widgets-displays-value-display
   Blynk.virtualWrite(BLYNK_DISPLAY_HUMIDITY, currentHumidity);
 }
+
 BLYNK_READ(BLYNK_DISPLAY_HOME_MIN_TEMP) {
   //this is a blynk value display
   // source: http://docs.blynk.cc/#widgets-displays-value-display
@@ -1335,6 +1395,17 @@ BLYNK_READ(BLYNK_DISPLAY_AWAY_MIN_TEMP) {
   // source: http://docs.blynk.cc/#widgets-displays-value-display
   Blynk.virtualWrite(BLYNK_DISPLAY_AWAY_MIN_TEMP, awayMinTemp);
 }
+BLYNK_READ(BLYNK_DISPLAY_HOME_MAX_TEMP) {
+  //this is a blynk value display
+  // source: http://docs.blynk.cc/#widgets-displays-value-display
+  Blynk.virtualWrite(BLYNK_DISPLAY_HOME_MAX_TEMP, homeMaxTemp);
+}
+BLYNK_READ(BLYNK_DISPLAY_AWAY_MAX_TEMP) {
+  //this is a blynk value display
+  // source: http://docs.blynk.cc/#widgets-displays-value-display
+  Blynk.virtualWrite(BLYNK_DISPLAY_AWAY_MAX_TEMP, awayMaxTemp);
+}
+
 BLYNK_READ(BLYNK_LED_FAN) {
   //this is a blynk led
   // source: http://docs.blynk.cc/#widgets-displays-led
@@ -1384,18 +1455,31 @@ BLYNK_READ(BLYNK_DISPLAY_STATE) {
                      to write values to the photon
                     source: http://docs.blynk.cc/#blynk-main-operations-send-data-from-app-to-hardware
  *******************************************************************************/
-BLYNK_WRITE(BLYNK_SLIDER_TEMP) {
+BLYNK_WRITE(BLYNK_SLIDER_HOME_MIN_TEMP) {
   //this is the blynk slider
   // source: http://docs.blynk.cc/#widgets-controllers-slider
   setHomeMin(param.asStr());
   flagSettingsHaveChanged();
 }
-BLYNK_WRITE(BLYNK_SLIDER_AWAY_TEMP) {
+BLYNK_WRITE(BLYNK_SLIDER_AWAY_MIN_TEMP) {
   //this is the blynk slider
   // source: http://docs.blynk.cc/#widgets-controllers-slider
   setAwayMin(param.asStr());
   flagSettingsHaveChanged();
 }
+BLYNK_WRITE(BLYNK_SLIDER_HOME_MAX_TEMP) {
+  //this is the blynk slider
+  // source: http://docs.blynk.cc/#widgets-controllers-slider
+  setHomeMax(param.asStr());
+  flagSettingsHaveChanged();
+}
+BLYNK_WRITE(BLYNK_SLIDER_AWAY_MAX_TEMP) {
+  //this is the blynk slider
+  // source: http://docs.blynk.cc/#widgets-controllers-slider
+  setAwayMax(param.asStr());
+  flagSettingsHaveChanged();
+}
+
 BLYNK_WRITE(BLYNK_BUTTON_FAN) {
   //flip fan status, if it's on switch it off and viceversa
   // do this only when blynk sends a 1
@@ -1542,6 +1626,8 @@ void updateBlynkCloud() {
 
     Blynk.virtualWrite(BLYNK_DISPLAY_HOME_MIN_TEMP, homeMinTemp);
     Blynk.virtualWrite(BLYNK_DISPLAY_AWAY_MIN_TEMP, awayMinTemp);
+    Blynk.virtualWrite(BLYNK_DISPLAY_HOME_MAX_TEMP, homeMaxTemp);
+    Blynk.virtualWrite(BLYNK_DISPLAY_AWAY_MAX_TEMP, awayMaxTemp);
 
     if ( externalPulse ) {
       pulseLed.on();
@@ -1590,13 +1676,14 @@ void flagSettingsHaveChanged()
 //randomly chosen value here. The only thing that matters is that it's not 255
 // since 255 is the default value for uninitialized eeprom
 // I used 137 and 138 in version 0.21 already
-#define EEPROM_VERSION 140
+#define EEPROM_VERSION 141
 #define EEPROM_ADDRESS 0
 struct EepromMemoryStructure {
   uint8_t version = EEPROM_VERSION;
   uint8_t homeMinTemp;
-  uint8_t targetAwaySummerTemp;
-  uint8_t targetAwayWinterTemp;
+  uint8_t awayMinTemp;
+  uint8_t homeMaxTemp;
+  uint8_t awayMaxTemp;
   uint8_t internalFan;
   uint8_t internalMode;
 };
@@ -1618,15 +1705,19 @@ void readFromEeprom()
 
     homeMinTemp = float( myObj.homeMinTemp );
     newHomeMinTemp = homeMinTemp;
-    homeMinString = float2string(homeMinTemp);
+    homeMinTempString = float2string(homeMinTemp);
 
-    awayMinTemp = float( myObj.targetAwaySummerTemp );
+    awayMinTemp = float( myObj.awayMinTemp );
     newAwayMinTemp = awayMinTemp;
     awayMinTempString = float2string(awayMinTemp);
 
-    // homeMinTemp = float( myObj.homeMinTemp );
-    // newHomeMinTemp = homeMinTemp;
-    // homeMinString = float2string(homeMinTemp);
+    homeMaxTemp = float( myObj.homeMaxTemp );
+    newHomeMaxTemp = homeMaxTemp;
+    homeMaxTempString = float2string(homeMaxTemp);
+
+    awayMaxTemp = float( myObj.awayMaxTemp );
+    newAwayMaxTemp = awayMaxTemp;
+    awayMaxTempString = float2string(awayMaxTemp);
 
     internalMode = convertIntToMode( myObj.internalMode );
     externalMode = internalMode;
@@ -1675,11 +1766,13 @@ void saveSettings() {
 
   //store thresholds in the struct type that will be saved in the eeprom
   eepromMemory.version = EEPROM_VERSION;
+  
   eepromMemory.homeMinTemp = uint8_t(homeMinTemp);
-  eepromMemory.targetAwayWinterTemp = uint8_t(awayMinTemp);
-  eepromMemory.targetAwaySummerTemp = uint8_t(awayMinTemp);
-  eepromMemory.internalMode = convertModeToInt(internalMode);
+  eepromMemory.awayMinTemp = uint8_t(awayMinTemp);
+  eepromMemory.homeMaxTemp = uint8_t(homeMaxTemp);
+  eepromMemory.awayMaxTemp = uint8_t(awayMaxTemp);
 
+  eepromMemory.internalMode = convertModeToInt(internalMode);
   eepromMemory.internalFan = 0;
   if ( internalFan ) {
     eepromMemory.internalFan = 1;
