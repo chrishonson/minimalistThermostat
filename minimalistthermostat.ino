@@ -294,6 +294,16 @@ void setup() {
   if (Particle.variable("homeMinTemp", homeMinTempString)==false) {
     Particle.publish(APP_NAME, "ERROR: Failed to register variable homeMinTemp", 60, PRIVATE);
   }
+  if (Particle.variable("homeMaxTemp", homeMaxTempString)==false) {
+    Particle.publish(APP_NAME, "ERROR: Failed to register variable homeMaxTemp", 60, PRIVATE);
+  }
+  if (Particle.variable("awayMaxTemp", awayMaxTempString)==false) {
+    Particle.publish(APP_NAME, "ERROR: Failed to register variable awayMaxTemp", 60, PRIVATE);
+  }
+  if (Particle.variable("awayMinTemp", awayMaxTempString)==false) {
+    Particle.publish(APP_NAME, "ERROR: Failed to register variable awayMinTemp", 60, PRIVATE);
+  }
+  
   if (Particle.variable("currentTemp", currentTempString)==false) {
     Particle.publish(APP_NAME, "ERROR: Failed to register variable currentTemp", 60, PRIVATE);
   }
@@ -724,7 +734,7 @@ void updatePulseStatus()
   //update only in the case the FSM state is idleState (the thermostat is doing nothing)
   // or pulseState (a pulse is already running and the user wants to abort it)
   if ( not ( thermostatStateMachine.isInState(idleState) or thermostatStateMachine.isInState(pulseState) ) ) {
-    Particle.publish(PUSHBULLET_NOTIF_HOME, "ERROR: You can only start a pulse in idle state" + getTime(), 60, PRIVATE);
+    // Particle.publish(PUSHBULLET_NOTIF_HOME, "ERROR: You can only start a pulse in idle state" + getTime(), 60, PRIVATE);
     pulseLed.off();
     return;
   }
@@ -997,16 +1007,16 @@ bool isUsersHome(){
 }
 float getTargetMin(){
   if(isUsersHome()){
-    return awayMinTemp;
-  }else{
     return homeMinTemp;
+  }else{
+    return awayMinTemp;
   }
 }
 float getTargetMax(){
   if(isUsersHome()){
-    return awayMaxTemp;
-  }else{
     return homeMaxTemp;
+  }else{
+    return awayMaxTemp;
   }
 }
 //you can change this to your liking
@@ -1034,7 +1044,7 @@ void idleUpdateFunction(){
   //if the thermostat is OFF, there is not much to do
   if ( internalMode == MODE_OFF ){
     if ( internalPulse ) {
-      Particle.publish(PUSHBULLET_NOTIF_HOME, "ERROR: You cannot start a pulse when the system is OFF" + getTime(), 60, PRIVATE);
+      // Particle.publish(PUSHBULLET_NOTIF_HOME, "ERROR: You cannot start a pulse when the system is OFF" + getTime(), 60, PRIVATE);
       internalPulse = false;
     }
     return;
@@ -1302,14 +1312,14 @@ int setCurrentTemp(String newCurrentTemp)
     // Example: show 19.00 instead of 19.000000
     currentTempString = currentTempString.substring(0, currentTempString.length()-4);
 
-    //Particle.publish(APP_NAME, "New current temp: " + currentTempString, 60, PRIVATE);
+    Particle.publish(APP_NAME, "New current temp: " + currentTempString, 60, PRIVATE);
     //Particle.publish(PUSHBULLET_NOTIF_PERSONAL, "New current temp: " + currentTempString + getTime(), 60, PRIVATE);
     String tempStatus = "New current temp: " + currentTempString + getTime();
     Particle.publish("googleDocs", "{\"my-name\":\"" + tempStatus + "\"}", 60, PRIVATE);
     return 0;
   } else {
-    //Particle.publish(APP_NAME, "ERROR: Failed to set new current temp to " + newCurrentTemp, 60, PRIVATE);
-    Particle.publish(PUSHBULLET_NOTIF_PERSONAL, "ERROR: Failed to set new current temp to " + newCurrentTemp + getTime(), 60, PRIVATE);
+    Particle.publish(APP_NAME, "ERROR: Failed to set new current temp to " + newCurrentTemp, 60, PRIVATE);
+    // Particle.publish(PUSHBULLET_NOTIF_PERSONAL, "ERROR: Failed to set new current temp to " + newCurrentTemp + getTime(), 60, PRIVATE);
     return -1;
   }
 }
@@ -1835,5 +1845,6 @@ uint8_t convertModeToInt( String mode )
   return 0;
 
 }
+
 
 
